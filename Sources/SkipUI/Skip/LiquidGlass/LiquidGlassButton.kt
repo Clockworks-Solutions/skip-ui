@@ -191,8 +191,8 @@ fun LiquidGlassButton(
 /**
  * A non-interactive Liquid Glass container, such as the title pill in a navigation bar.
  *
- * Uses the same glass recipe as [LiquidGlassButton], with a stronger frost in light mode so text on it stays
- * readable, and no press behavior.
+ * Uses the same glass as an untinted [LiquidGlassButton] at rest (frost, lens, highlight, and shadow), so a surface next
+ * to a glass button looks identical. It has no press behavior.
  *
  * @param modifier The modifier to apply to the surface.
  * @param shape The glass shape. Defaults to a capsule.
@@ -208,7 +208,7 @@ fun LiquidGlassSurface(
 ) {
     val backdrop = LocalGlassBackdrop.current
     val isLight = !isSystemInDarkTheme()
-    val surfaceColor = if (isLight) Color.White.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.1f)
+    val surfaceColor = if (isLight) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.1f)
 
     val glassModifier = if (backdrop != null) {
         // Shared backdrop: refract the real content behind the surface
@@ -218,8 +218,7 @@ fun LiquidGlassSurface(
             effects = {
                 vibrancy()
                 blur(4f.dp.toPx())
-                // Chromatic aberration reads as color fringing on dark content, so only use it in light mode
-                lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = isLight)
+                lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = true)
             },
             highlight = { Highlight.Default },
             shadow = { Shadow(alpha = 0.30f) },
@@ -229,10 +228,11 @@ fun LiquidGlassSurface(
         // No shared backdrop: fall back to a local one so the surface still renders as glass
         val localBackdrop = rememberLayerBackdrop { drawContent() }
         val fillColor = if (isLight) Color.White else Color.Black
+        val fillAlpha = if (isLight) 0.2f else 0.1f
 
         Modifier
             .shadow(
-                elevation = 8.dp,
+                elevation = 0.dp,
                 shape = shape,
                 spotColor = Color.Black.copy(alpha = 0.28f),
                 ambientColor = Color.Black.copy(alpha = 0.10f)
@@ -247,7 +247,7 @@ fun LiquidGlassSurface(
                 },
                 highlight = { Highlight.Default },
                 shadow = { Shadow(alpha = 0.30f) },
-                onDrawSurface = { drawRect(fillColor.copy(alpha = 0.20f)) }
+                onDrawSurface = { drawRect(fillColor.copy(alpha = fillAlpha)) }
             )
     }
 
