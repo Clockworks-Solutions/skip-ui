@@ -28,6 +28,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 
+// Liquid Glass: backdrop APIs used to share a glass backdrop with the presentation's content
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+
 /// The root of a presentation, such as the root presentation or a sheet.
 @Composable public func PresentationRoot(defaultColorScheme: ColorScheme? = nil, absoluteSystemBarEdges systemBarEdges: Edge.Set = .all, context: ComposeContext, content: @Composable (ComposeContext) -> Void) {
     launchUIApplicationActivity()
@@ -89,8 +94,15 @@ import androidx.compose.ui.platform.LocalLayoutDirection
                     $0.set_scrollAxes(Axis.Set(rawValue: 0))
                     return ComposeResult.ok
                 } in: {
+                    // Liquid Glass: create one backdrop per presentation (root or sheet) and provide it as
+                    // `LocalGlassBackdrop`, so glass components in this presentation share it instead of each
+                    // falling back to their own local backdrop. See `LiquidGlassButton.kt`.
+                    // SKIP INSERT: val rootBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop { drawContent() }
+
                     Box(modifier: Modifier.fillMaxSize().padding(safeArea), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        // SKIP INSERT: androidx.compose.runtime.CompositionLocalProvider(skip.ui.LocalGlassBackdrop provides rootBackdrop) {
                         content(context)
+                        // SKIP INSERT: }
                     }
                 }
             }
