@@ -93,6 +93,9 @@ build:
         - 'implementation(libs.coil.svg)'
         #- 'implementation(libs.coil.gif)'
 
+        # Liquid Glass: Kyant's backdrop library - https://github.com/Kyant0/AndroidLiquidGlass
+        - 'api("io.github.kyant0:backdrop:1.0.6")'
+
         - 'testImplementation(libs.androidx.compose.ui.test)'
         - 'androidTestImplementation(libs.androidx.compose.ui.test)'
         - 'testImplementation(libs.androidx.compose.ui.test.junit4)'
