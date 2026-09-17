@@ -436,7 +436,10 @@ public struct NavigationStack : View, Renderable {
                             titleContentColor: MaterialTheme.colorScheme.onSurface
                         )
                         let topBarTitle: @Composable () -> Void = {
-                            if let titleMenu {
+                            // Liquid Glass: see ExtensionNavigation.swift
+                            if shouldShowLiquidGlassNavigationTitle(hasBackButton: !arguments.isRoot && arguments.toolbarPreferences.backButtonHidden != true, isInlineTitleDisplayMode: isInlineTitleDisplayMode, collapsedFraction: scrollBehavior.state.collapsedFraction) {
+                                LiquidGlassNavigationTitle(title: title, titleMenu: titleMenu, interactionSource: interactionSource, context: context)
+                            } else if let titleMenu {
                                 let menuModifier = Modifier.clickable(interactionSource: interactionSource, indication: nil, onClick: {
                                     titleMenu.toggleMenu()
                                 })
@@ -466,15 +469,9 @@ public struct NavigationStack : View, Renderable {
                                         }
                                         switch navigationIconButtonStyle {
                                         case Material3TopAppBarNavigationIconButtonStyle.filledIconButton:
-                                            FilledIconButton(
-                                                onClick: { navigator.value.navigateBack() },
-                                                colors: navigationIconButtonColors ?? IconButtonDefaults.filledIconButtonColors()
-                                            ) { backIcon() }
+                                            LiquidGlassNavigationBackButton(isProminent: true, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see ExtensionNavigation.swift
                                         case Material3TopAppBarNavigationIconButtonStyle.iconButton:
-                                            IconButton(
-                                                onClick: { navigator.value.navigateBack() },
-                                                colors: navigationIconButtonColors ?? IconButtonDefaults.iconButtonColors()
-                                            ) { backIcon() }
+                                            LiquidGlassNavigationBackButton(isProminent: false, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see ExtensionNavigation.swift
                                         }
                                     }
                                     for renderable in topLeadingItems {
