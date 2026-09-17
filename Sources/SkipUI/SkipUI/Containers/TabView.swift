@@ -780,7 +780,7 @@ public protocol TabContent : View {
 public struct Tab : TabContent, Renderable {
     let label: ComposeBuilder
     let content: ComposeBuilder
-    let value: Any?
+    public let value: Any? // Liquid Glass: public for custom tab bars, see ExtensionTabView.swift
 
     public init(_ title: String, image: String, value: Any?, role: TabRole? = nil, @ViewBuilder content: () -> any View) {
         self.label = ComposeBuilder(view: Label(title, image: image))
@@ -888,7 +888,7 @@ public struct Tab : TabContent, Renderable {
         content.Compose(context: context)
     }
 
-    @Composable func RenderTitle(context: ComposeContext) {
+    @Composable public func RenderTitle(context: ComposeContext) { // Liquid Glass: public, see ExtensionTabView.swift
         let renderable = label.Evaluate(context: context, options: 0).firstOrNull() ?? EmptyView()
         let stripped = renderable.strip()
         if let label = stripped as? Label {
@@ -898,7 +898,7 @@ public struct Tab : TabContent, Renderable {
         }
     }
 
-    @Composable func RenderImage(context: ComposeContext) {
+    @Composable public func RenderImage(context: ComposeContext) { // Liquid Glass: public, see ExtensionTabView.swift
         let renderable = label.Evaluate(context: context, options: 0).firstOrNull() ?? EmptyView()
         let stripped = renderable.strip()
         // compute size of outer box (for padding)

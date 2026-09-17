@@ -73,8 +73,7 @@ public final class EnvironmentValues {
     ///
     /// - Seealso: ``View/environment(_:)``
     /// - Warning: Setting environment values should only be done within the `execute` block of this function.
-    @Composable func setValues(_ execute: @Composable (EnvironmentValues) -> ComposeResult, in content: @Composable () -> Void) {
-        // Set the values in EnvironmentValues to keep any user-defined setter logic in place, then retrieve and clear the last set values
+    @Composable public func setValues(_ execute: @Composable (EnvironmentValues) -> ComposeResult, in content: @Composable () -> Void) { // Liquid Glass: public so app-side glass views can set environment values
         execute(self)
         for action in lastSetActions {
             action()
