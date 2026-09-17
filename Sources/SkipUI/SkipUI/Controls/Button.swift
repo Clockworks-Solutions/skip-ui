@@ -200,6 +200,8 @@ public struct Button : View, Renderable {
                 RenderTextButton(label: label, context: context.content(modifier: modifier), role: role, isPlain: true, isEnabled: isEnabled, action: action)
             case .m3Text:
                 RenderM3TextButton(label: label, context: context.content(modifier: modifier), role: role, isPlain: false, isEnabled: isEnabled, action: action)
+            case .glass, .glassProminent: // Liquid Glass: see ExtensionButton.swift
+                RenderGlassButton(label: label, context: context.content(modifier: modifier), role: role, isEnabled: isEnabled, isProminent: buttonStyle == .glassProminent, action: action)
             default:
                 RenderTextButton(label: label, context: context.content(modifier: modifier), role: role, isEnabled: isEnabled, action: action)
             }
@@ -294,9 +296,7 @@ public struct ButtonStyle: RawRepresentable, Equatable {
     public static let bordered = ButtonStyle(rawValue: 3) // For bridging
     public static let borderedProminent = ButtonStyle(rawValue: 4) // For bridging
     public static let m3Text = ButtonStyle(rawValue: 7) // For bridging
-    @available(*, unavailable)
-    public static let glass = ButtonStyle(rawValue: 5) // For bridging
-    @available(*, unavailable)
+    public static let glass = ButtonStyle(rawValue: 5) // For bridging (Liquid Glass: see ExtensionButton.swift)
     public static let glassProminent = ButtonStyle(rawValue: 6) // For bridging
 }
 
