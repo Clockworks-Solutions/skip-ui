@@ -277,6 +277,7 @@ public struct TabView : View, Renderable {
         // Reduce the tab bar preferences outside the bar composable. Otherwise the reduced value may change
         // when the bottom bar recomposes
         let reducedTabBarPreferences = tabBarPreferences.value.reduced
+        let glassTabBarBackdrop = rememberLiquidGlassTabBarBackdrop() // Liquid Glass: tab content refracted by the glass tab bar, see ExTabView.swift
 
         // When we layout, extend into the safe area if it is due to system bars, not into any app chrome. We extend
         // into the top bar too so that tab content can also extend into the top area without getting cut off during
@@ -416,7 +417,14 @@ public struct TabView : View, Renderable {
                                         disabledIconColor: options.itemColors.disabledIconColor,
                                         disabledTextColor: options.itemColors.disabledTextColor
                                     )
-                                    if layoutType == NavigationSuiteType.NavigationBar {
+                                    if layoutType == NavigationSuiteType.NavigationBar { // Liquid Glass: glass tab bar replaces the Material bar, see ExTabView.swift
+                                        SideEffect {
+                                            // The glass bar floats over the content, so the content is not inset for it
+                                            bottomBarTopPx.value = Float(0.0)
+                                            bottomBarHeightPx.value = Float(0.0)
+                                        }
+                                        LiquidGlassTabViewNavigationBar(backdrop: glassTabBarBackdrop, tabs: tabs, selectedTabIndex: selectedTabIndex.value, options: options)
+                                    } else if layoutType == NavigationSuiteType.NavigationBar {
                                         NavigationBar(modifier: options.modifier.semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar"), containerColor: options.containerColor, contentColor: options.contentColor, tonalElevation: options.tonalElevation) {
                                             for tabIndex in 0..<tabRenderables.size {
                                                 // A tab from a `false` conditional branch (e.g. `if x { Tab(...) }`)
@@ -538,7 +546,7 @@ public struct TabView : View, Renderable {
                             let transitions = EnvironmentValues.shared._tabViewTransitions?(defaults) ?? defaults
                             NavDisplay(
                                 entries: activeEntries,
-                                modifier: Modifier.fillMaxSize(),
+                                modifier: Modifier.fillMaxSize().then(liquidGlassTabBarBackdropModifier(glassTabBarBackdrop)), // Liquid Glass: record content for the glass tab bar
                                 onBack: {
                                     if activeStack.size > 1 {
                                         activeStack.removeLastOrNull()

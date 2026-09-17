@@ -1,5 +1,5 @@
 //
-//  ExtensionNavigation.swift
+//  Navigation+LiquidGlass.swift
 //  skip-ui
 //
 //  Created by Dhruv Chhatbar on 17/09/26.

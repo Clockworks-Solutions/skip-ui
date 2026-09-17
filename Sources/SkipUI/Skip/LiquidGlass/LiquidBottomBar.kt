@@ -26,6 +26,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -71,6 +74,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -102,11 +106,11 @@ object LiquidIcons {
 }
 
 /**
- * A single tab in a [LiquidGlassTabView] or [LiquidGlassTabBar].
+ * A single tab in a [LiquidGlassTabBar].
  *
  * @property icon The tab icon, drawn in a fixed-size box.
  * @property title The tab label, drawn below the icon.
- * @property content The body shown when the tab is selected.
+ * @property content The body shown when the tab is selected. Not used by [LiquidGlassTabView], where `TabView` renders the content.
  */
 class GlassTab(
     val icon: @Composable () -> Unit,
@@ -115,78 +119,47 @@ class GlassTab(
 )
 
 /**
- * The builder scope for [LiquidGlassTabView], similar to the content of a SwiftUI `TabView`.
- */
-class LiquidGlassTabScope {
-    internal val tabs = mutableListOf<GlassTab>()
-
-    /**
-     * Adds a tab.
-     *
-     * @param icon The tab icon.
-     * @param title The tab label.
-     * @param content The body shown when the tab is selected.
-     */
-    fun tabItem(
-        icon: @Composable () -> Unit,
-        title: @Composable () -> Unit,
-        content: @Composable () -> Unit
-    ) {
-        tabs.add(GlassTab(icon = icon, title = title, content = content))
-    }
-}
-
-/**
- * A tab view with a floating Liquid Glass tab bar over its content.
+ * The Liquid Glass tab bar for SkipUI's `TabView`: a [LiquidGlassTabBar] floating over the tab content, in place of
+ * the Material `NavigationBar`.
  *
- * The selected tab's content fills the view and is recorded into a backdrop, and a [LiquidGlassTabBar]
- * floats at the bottom and refracts that content. Switching tabs cross-fades the content.
+ * The `TabView` owns the tab content, back stacks, and selection; this only renders the bar. It takes no height in the
+ * tab view layout, so tab content extends to the bottom of the screen and scrolls beneath the glass. The bar draws
+ * upward from the bottom edge, above the system navigation bar, and is sized to about 88dp per tab, capped to the
+ * available width minus 24dp on each side.
  *
- * The bar is sized to about 88dp per tab, capped to the available width minus 24dp on each side.
- *
- * @param modifier The modifier to apply to the tab view.
- * @param selectedIndex The selected tab. Changes to this value are applied, so it can be driven by app state.
- * @param onTabSelected Called with the new index when the user selects a tab.
- * @param content Declares the tabs using [LiquidGlassTabScope.tabItem]. Tabs are collected once, on first composition.
+ * @param backdrop The recorded tab content that the bar refracts.
+ * @param tabIndices The `TabView` indices of the visible tabs, in display order. Hidden and conditional tabs are omitted.
+ * @param selectedTabIndex The `TabView` index of the selected tab.
+ * @param icon Renders the icon for a `TabView` index.
+ * @param label Renders the title for a `TabView` index, if tabs have titles.
+ * @param onTabSelected Called with the `TabView` index of the tab the user selects.
  */
 @Composable
 fun LiquidGlassTabView(
-    modifier: Modifier = Modifier,
-    selectedIndex: Int = 0,
-    onTabSelected: ((Int) -> Unit)? = null,
-    content: LiquidGlassTabScope.() -> Unit
+    backdrop: Backdrop,
+    tabIndices: kotlin.collections.List<Int>,
+    selectedTabIndex: Int,
+    icon: @Composable (Int) -> Unit,
+    label: (@Composable (Int) -> Unit)?,
+    onTabSelected: (Int) -> Unit
 ) {
-    val scope = remember { LiquidGlassTabScope().apply(content) }
-    val tabs = scope.tabs
-    if (tabs.isEmpty()) return
+    if (tabIndices.isEmpty()) return
 
-    val backdrop = rememberLayerBackdrop { drawContent() }
-    var currentIndex by rememberSaveable { mutableIntStateOf(selectedIndex) }
-
-    // React to externally driven selection changes (e.g. @AppStorage binding)
-    LaunchedEffect(selectedIndex) {
-        if (selectedIndex != currentIndex) currentIndex = selectedIndex
+    // Map TabView indices to glass tabs; LiquidGlassTabBar works in display positions
+    val tabs = tabIndices.map { tabIndex ->
+        GlassTab(icon = { icon(tabIndex) }, title = { label?.invoke(tabIndex) }, content = {})
     }
+    val selectedPosition = tabIndices.indexOf(selectedTabIndex).coerceAtLeast(0)
 
-    Box(modifier = modifier.fillMaxSize()) {
-        // Tab content is recorded into `backdrop` so the bar can refract it
-        AnimatedContent(
-            targetState = currentIndex,
-            modifier = Modifier.fillMaxSize().layerBackdrop(backdrop),
-            transitionSpec = {
-                fadeIn(animationSpec = tween(400)) togetherWith fadeOut(animationSpec = tween(400))
-            },
-            label = "TabContentTransition"
-        ) { targetIndex ->
-            if (targetIndex in tabs.indices) tabs[targetIndex].content()
-        }
-
+    // Zero-height slot so the TabView gives its content the full height; the bar overflows upward over the content
+    Box(modifier = Modifier.fillMaxWidth().height(0.dp).zIndex(1f)) {
         // Measure available width, then size the bar to content (ideal 88dp per tab),
         // falling back to equal sharing when the screen is too narrow
         BoxWithConstraints(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .wrapContentHeight(align = Alignment.Bottom, unbounded = true)
+                .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(bottom = 2.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -198,11 +171,8 @@ fun LiquidGlassTabView(
             LiquidGlassTabBar(
                 backdrop = backdrop,
                 tabs = tabs,
-                selectedIndex = currentIndex,
-                onTabSelected = { index ->
-                    currentIndex = index
-                    onTabSelected?.invoke(index)
-                },
+                selectedIndex = selectedPosition,
+                onTabSelected = { position -> onTabSelected(tabIndices[position]) },
                 modifier = Modifier.width(barWidth)
             )
         }
@@ -221,7 +191,7 @@ fun LiquidGlassTabView(
  * 2. A hidden, accent-tinted copy of the icons, recorded into a separate backdrop.
  * 3. The pill, which refracts both backdrops so the selected icon shows in the accent color.
  *
- * Use [LiquidGlassTabView] for a complete tab view, or use this directly to place the bar over custom content.
+ * [LiquidGlassTabView] uses this for SkipUI's `TabView`, or use this directly to place the bar over custom content.
  *
  * @param backdrop The recorded content behind the bar, typically from `rememberLayerBackdrop` applied to the
  *   screen content with `layerBackdrop`.
