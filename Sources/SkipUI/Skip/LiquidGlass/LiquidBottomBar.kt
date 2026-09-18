@@ -2,7 +2,7 @@
 //
 // Liquid Glass: floating glass tab bar built on Kyant's backdrop library.
 // https://github.com/Kyant0/AndroidLiquidGlass
-package skip.ui
+package skip.ui.liquidglass
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable

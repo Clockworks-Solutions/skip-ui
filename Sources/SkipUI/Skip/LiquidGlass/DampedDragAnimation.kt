@@ -2,7 +2,7 @@
 //
 // Liquid Glass: adapted from the catalog components in Kyant's AndroidLiquidGlass project.
 // https://github.com/Kyant0/AndroidLiquidGlass
-package skip.ui
+package skip.ui.liquidglass
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring

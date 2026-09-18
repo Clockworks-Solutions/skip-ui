@@ -10,6 +10,7 @@ import Foundation
 #if SKIP
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import skip.ui.liquidglass.__
 #endif
 
 /// Whether glass components render with Liquid Glass on Android.

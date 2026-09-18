@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import skip.ui.liquidglass.__
 
 extension Button {
     /// Render a Liquid Glass button for the `.glass` and `.glassProminent` styles.

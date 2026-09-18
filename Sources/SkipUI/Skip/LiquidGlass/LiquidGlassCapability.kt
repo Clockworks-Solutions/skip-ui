@@ -2,7 +2,7 @@
 //
 // Liquid Glass: device-adaptive rendering tier, resolved once per process with Blinkit's Droid Dex.
 // https://github.com/grofers/droid-dex
-package skip.ui
+package skip.ui.liquidglass
 
 import android.content.Context
 import android.os.SystemClock

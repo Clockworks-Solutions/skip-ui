@@ -16,6 +16,7 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import skip.ui.liquidglass.__
 
 /// Remember the backdrop that records `TabView` content for the glass tab bar.
 @Composable func rememberLiquidGlassTabBarBackdrop() -> LayerBackdrop {
@@ -48,7 +49,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 ///   - tabs: The `TabView` tabs, indexed like its routes.
 ///   - selectedTabIndex: The index of the selected tab.
 ///   - options: The resolved navigation bar options.
-@Composable func LiquidGlassTabViewNavigationBar(backdrop: Backdrop, tabs: kotlin.collections.List<Tab?>, selectedTabIndex: Int, options: Material3NavigationBarOptions) {
+@Composable func LiquidGlassTabViewBar(backdrop: Backdrop, tabs: kotlin.collections.List<Tab?>, selectedTabIndex: Int, options: Material3NavigationBarOptions) {
     let tabIndices = mutableListOf<Int>()
     for tabIndex in 0..<tabs.size {
         if tabs[tabIndex] == nil || tabs[tabIndex]?.isHidden == true {

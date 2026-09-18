@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import skip.ui.liquidglass.__
 
 /// Whether the navigation title should be drawn in a Liquid Glass pill.
 ///

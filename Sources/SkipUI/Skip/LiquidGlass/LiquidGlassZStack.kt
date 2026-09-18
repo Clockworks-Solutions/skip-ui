@@ -2,7 +2,7 @@
 //
 // Liquid Glass: lets glass in a ZStack refract the layers behind it, built on Kyant's backdrop library.
 // https://github.com/Kyant0/AndroidLiquidGlass
-package skip.ui
+package skip.ui.liquidglass
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
@@ -14,6 +14,11 @@ import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+
+import skip.ui.ComposeContext
+import skip.ui.EnvironmentValues
+import skip.ui.Renderable
+import skip.ui.ZIndexModifier
 
 /**
  * Renders the children of one `ZStack` so glass in each child samples the children behind it.
