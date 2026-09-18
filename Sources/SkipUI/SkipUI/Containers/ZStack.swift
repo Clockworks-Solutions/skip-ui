@@ -64,11 +64,12 @@ public struct ZStack : View, Renderable {
                     // animation state into another — e.g. a view jumps to a sibling's animated
                     // position or briefly adopts its color. See `childKey`.
                     let occurrences = mutableMapOf<Any, Int>()
+                    let glassLayers = LiquidGlassZStackLayers(count: renderables.size) // Liquid Glass: see LiquidGlassZStack.kt
                     for index in 0..<renderables.size {
                         let renderable = renderables[index]
                         let key = childKey(for: renderable, index: index, occurrences: occurrences)
                         androidx.compose.runtime.key(key) {
-                            renderable.Render(context: contentContext)
+                            glassLayers.RenderChild(renderable: renderable, index: index, context: contentContext) // Liquid Glass: glass samples the children behind it
                         }
                     }
                 }
