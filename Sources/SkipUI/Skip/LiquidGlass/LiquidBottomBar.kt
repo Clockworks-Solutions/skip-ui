@@ -60,6 +60,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -185,6 +186,8 @@ internal fun LiquidGlassTabView(
  * @param selectedIndex The selected tab. Changes to this value move the pill.
  * @param onTabSelected Called with the new index when the selection changes by tap or drag.
  * @param modifier The modifier to apply to the bar, usually a width.
+ * @param style The tier's glass settings. Defaults to [LiquidGlassStyle.current]. Without [LiquidGlassStyle.accentLayer],
+ *   layer 2 is skipped: layer 1 tints the tab under the pill with the accent color and feeds the pill's backdrop instead.
  */
 @Composable
 internal fun LiquidGlassTabBar(
@@ -192,7 +195,8 @@ internal fun LiquidGlassTabBar(
     tabs: kotlin.collections.List<GlassTab>,
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    style: LiquidGlassStyle = LiquidGlassStyle.current
 ) {
     if (tabs.isEmpty()) return
 
@@ -303,8 +307,11 @@ internal fun LiquidGlassTabBar(
         }
 
         // ── Layer 1: visible glass bar + tab icons ──────────────────────────
+        // Without the accent layer, this layer feeds `tabsBackdrop` instead, so the pill still shows the
+        // (accent-tinted) icon beneath it.
         Row(
             modifier = Modifier
+                .then(if (style.accentLayer) Modifier else Modifier.layerBackdrop(tabsBackdrop))
                 .graphicsLayer { translationX = panelOffset }
                 .drawBackdrop(
                     backdrop = backdrop,
@@ -312,7 +319,7 @@ internal fun LiquidGlassTabBar(
                     effects = {
                         vibrancy()
                         blur(8f.dp.toPx())
-                        lens(24f.dp.toPx(), 24f.dp.toPx())
+                        if (style.lens) lens(24f.dp.toPx(), 24f.dp.toPx())
                     },
                     layerBlock = {
                         // Grow the bar by up to 16dp in width while the pill is pressed
@@ -347,6 +354,12 @@ internal fun LiquidGlassTabBar(
                         .weight(1f)
                         .fillMaxHeight()
                         .sizeIn(minWidth = minimumTouchTarget, minHeight = minimumTouchTarget)
+                        // Without the accent layer, tint the tab under the pill here instead, fading to neutral
+                        // one tab away
+                        .then(
+                            if (style.accentLayer || proximity <= 0f) Modifier
+                            else Modifier.graphicsLayer(colorFilter = ColorFilter.tint(lerp(baseContentColor, accentColor, proximity)))
+                        )
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
@@ -382,8 +395,8 @@ internal fun LiquidGlassTabBar(
         // Feeds `tabsBackdrop`. The pill below reveals a lens-distorted slice of
         // this layer through a combined backdrop, which is why the icon under
         // the glass pill reads as accent-colored while the rest stay neutral.
-        // Hidden from accessibility so tabs aren't announced twice.
-        Row(
+        // Hidden from accessibility so tabs aren't announced twice. Skipped without the accent layer.
+        if (style.accentLayer) Row(
             modifier = Modifier
                 .clearAndSetSemantics {}
                 .alpha(0f)
@@ -460,10 +473,10 @@ internal fun LiquidGlassTabBar(
                     effects = {
                         // Lens, highlight, and shadows only appear while pressed
                         val progress = anim.pressProgress
-                        lens(
+                        if (style.lens) lens(
                             10f.dp.toPx() * progress,
                             14f.dp.toPx() * progress,
-                            chromaticAberration = true
+                            chromaticAberration = style.chromaticAberration
                         )
                     },
                     highlight = {

@@ -78,6 +78,15 @@ internal data class LiquidGlassStyle(
 
         /** Settings for [LiquidGlassTier.REDUCED]: drops the GPU-heavy lens shader work. */
         val Reduced = LiquidGlassStyle(lens = false, chromaticAberration = false, accentLayer = false)
+
+        /**
+         * The settings for the resolved tier. [Full] while the tier is [LiquidGlassTier.NATIVE], where glass components
+         * are not rendered, so a component rendered directly keeps the complete look.
+         *
+         * Reads Compose state, so a component reading it during composition recomposes when the tier resolves.
+         */
+        val current: LiquidGlassStyle
+            get() = LiquidGlassCapability.tier.style ?: Full
     }
 }
 

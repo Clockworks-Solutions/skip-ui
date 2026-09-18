@@ -79,6 +79,7 @@ internal val LocalGlassBackdrop: ProvidableCompositionLocal<Backdrop?> = composi
  *   or dark frost is used based on the system theme.
  * @param contentPadding Padding between the glass edge and the content.
  * @param interactionSource An optional source for observing press state. One is created if `null`.
+ * @param style The tier's glass settings. Defaults to [LiquidGlassStyle.current].
  * @param content The button label, laid out in a centered row.
  */
 @Composable
@@ -92,6 +93,7 @@ internal fun LiquidGlassButton(
     surfaceColor: Color = Color.Unspecified,
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
     interactionSource: MutableInteractionSource? = null,
+    style: LiquidGlassStyle = LiquidGlassStyle.current,
     content: @Composable RowScope.() -> Unit
 ) {
     val backdrop = LocalGlassBackdrop.current
@@ -122,7 +124,7 @@ internal fun LiquidGlassButton(
                 effects = {
                     vibrancy()
                     blur(4f.dp.toPx())
-                    lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = true)
+                    if (style.lens) lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = style.chromaticAberration)
                 },
                 layerBlock = {
                     // Squash and stretch: widen and flatten while pressed
@@ -162,7 +164,7 @@ internal fun LiquidGlassButton(
                 effects = {
                     vibrancy()
                     blur(4f.dp.toPx())
-                    lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = true)
+                    if (style.lens) lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = style.chromaticAberration)
                 },
                 highlight = { Highlight.Default },
                 shadow = { Shadow(alpha = 0.30f) },
@@ -197,6 +199,7 @@ internal fun LiquidGlassButton(
  * @param modifier The modifier to apply to the surface.
  * @param shape The glass shape. Defaults to a capsule.
  * @param contentPadding Padding between the glass edge and the content.
+ * @param style The tier's glass settings. Defaults to [LiquidGlassStyle.current].
  * @param content The surface content, laid out in a centered row.
  */
 @Composable
@@ -204,6 +207,7 @@ internal fun LiquidGlassSurface(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(percent = 50),
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+    style: LiquidGlassStyle = LiquidGlassStyle.current,
     content: @Composable RowScope.() -> Unit
 ) {
     val backdrop = LocalGlassBackdrop.current
@@ -218,7 +222,7 @@ internal fun LiquidGlassSurface(
             effects = {
                 vibrancy()
                 blur(4f.dp.toPx())
-                lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = true)
+                if (style.lens) lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = style.chromaticAberration)
             },
             highlight = { Highlight.Default },
             shadow = { Shadow(alpha = 0.30f) },
@@ -243,7 +247,7 @@ internal fun LiquidGlassSurface(
                 effects = {
                     vibrancy()
                     blur(4f.dp.toPx())
-                    lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = true)
+                    if (style.lens) lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = style.chromaticAberration)
                 },
                 highlight = { Highlight.Default },
                 shadow = { Shadow(alpha = 0.30f) },
