@@ -22,9 +22,19 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
     return rememberLayerBackdrop()
 }
 
-/// A modifier that records the tab content it is applied to into the glass tab bar backdrop.
-func liquidGlassTabBarBackdropModifier(_ backdrop: LayerBackdrop) -> Modifier {
+/// A modifier that records the tab content it is applied to into the glass tab bar backdrop, or no modifier when the
+/// Liquid Glass tier is `NATIVE` and the Material bar is shown.
+@Composable func liquidGlassTabBarBackdropModifier(_ backdrop: LayerBackdrop) -> Modifier {
+    guard isLiquidGlassTabBarEnabled() else {
+        return Modifier
+    }
     return Modifier.layerBackdrop(backdrop)
+}
+
+/// Whether the `TabView` bottom bar renders as the glass tab bar, rather than the Material `NavigationBar` for the
+/// `NATIVE` Liquid Glass tier.
+@Composable func isLiquidGlassTabBarEnabled() -> Bool {
+    return EnvironmentValues.shared.liquidGlassTier() != LiquidGlassTier.NATIVE
 }
 
 /// Render the `TabView` bottom bar as a floating `LiquidGlassTabView` instead of the Material `NavigationBar`.

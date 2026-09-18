@@ -37,6 +37,8 @@ extension Button {
     /// - Parameters:
     ///   - isProminent: Whether to render the tinted `.glassProminent` variant.
     ///   - action: The tap action, or nil for a button that does nothing when tapped.
+    ///
+    /// When the Liquid Glass tier is `NATIVE`, renders the Material `.bordered` or `.borderedProminent` style instead.
     @Composable static func RenderGlassButton(
         label: View,
         context: ComposeContext,
@@ -45,6 +47,15 @@ extension Button {
         isProminent: Bool,
         action: (() -> Void)? = nil
     ) {
+        guard EnvironmentValues.shared.liquidGlassTier() != LiquidGlassTier.NATIVE else {
+            EnvironmentValues.shared.setValues {
+                $0.set_buttonStyle(isProminent ? ButtonStyle.borderedProminent : ButtonStyle.bordered)
+                return ComposeResult.ok
+            } in: {
+                RenderButton(label: label, context: context, role: role, isEnabled: isEnabled, action: action ?? {})
+            }
+            return
+        }
         let isHitTestingEnabled = EnvironmentValues.shared._isHitTestingEnabled
 
         var foregroundStyle: ShapeStyle

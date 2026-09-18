@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.unit.dp
@@ -63,6 +65,14 @@ import com.kyant.backdrop.shadow.Shadow
 internal val LocalGlassBackdrop: ProvidableCompositionLocal<Backdrop?> = compositionLocalOf { null }
 
 /**
+ * The frost drawn on untinted glass: the tab bar's container color, so buttons, surfaces, and the tab bar share one look.
+ *
+ * @param isLight Whether the system theme is light.
+ */
+internal fun liquidGlassFrostColor(isLight: Boolean): Color =
+    if (isLight) Color(0xFFFAFAFA).copy(alpha = 0.7f) else Color(0xFF121212).copy(alpha = 0.4f)
+
+/**
  * A capsule button with a Liquid Glass look: blurred, lens-refracted backdrop, specular highlight,
  * and a squash-and-stretch press animation with a touch glow.
  *
@@ -75,8 +85,8 @@ internal val LocalGlassBackdrop: ProvidableCompositionLocal<Backdrop?> = composi
  * @param onClick Called when the button is tapped.
  * @param shape The glass shape. Defaults to a capsule.
  * @param tint When specified, tints the glass with this color, as in `.glassProminent`.
- * @param surfaceColor An overlay color drawn on the glass. When unspecified and there is no [tint], a light
- *   or dark frost is used based on the system theme.
+ * @param surfaceColor An overlay color drawn on the glass. When unspecified and there is no [tint], the
+ *   [liquidGlassFrostColor] for the system theme is used.
  * @param contentPadding Padding between the glass edge and the content.
  * @param interactionSource An optional source for observing press state. One is created if `null`.
  * @param style The tier's glass settings. Defaults to [LiquidGlassStyle.current].
@@ -111,8 +121,28 @@ internal fun LiquidGlassButton(
 
     val resolvedSurfaceColor = when {
         surfaceColor.isSpecified -> surfaceColor
-        !tint.isSpecified -> if (isLight) Color.White.copy(alpha = 0.20f) else Color.Black.copy(alpha = 0.1f)
+        !tint.isSpecified -> liquidGlassFrostColor(isLight)
         else -> Color.Unspecified
+    }
+
+    // Draws the prominent tint and the frost on the glass. Shared by both backdrop paths, so `.glassProminent` stays tinted
+    // with the local fallback backdrop too.
+    val drawSurface: DrawScope.() -> Unit = {
+        if (tint.isSpecified) {
+            // Hue blend colors the backdrop, then a translucent fill sets the prominent tint
+            drawRect(tint, blendMode = BlendMode.Hue)
+            drawRect(tint.copy(alpha = 0.75f))
+        }
+        if (resolvedSurfaceColor.isSpecified) {
+            drawRect(resolvedSurfaceColor)
+        }
+    }
+
+    // Squash and stretch: widen and flatten while pressed
+    val pressLayerBlock: GraphicsLayerScope.() -> Unit = {
+        val s = 1f + 0.06f * press
+        scaleX = s
+        scaleY = 1f / s
     }
 
     val glassModifier = if (backdrop != null) {
@@ -126,30 +156,14 @@ internal fun LiquidGlassButton(
                     blur(4f.dp.toPx())
                     if (style.lens) lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = style.chromaticAberration)
                 },
-                layerBlock = {
-                    // Squash and stretch: widen and flatten while pressed
-                    val s = 1f + 0.06f * press
-                    scaleX = s
-                    scaleY = 1f / s
-                },
+                layerBlock = pressLayerBlock,
                 highlight = { Highlight.Default },
                 shadow = { Shadow(alpha = 0.30f) },
-                onDrawSurface = {
-                    if (tint.isSpecified) {
-                        // Hue blend colors the backdrop, then a translucent fill sets the prominent tint
-                        drawRect(tint, blendMode = BlendMode.Hue)
-                        drawRect(tint.copy(alpha = 0.75f))
-                    }
-                    if (resolvedSurfaceColor.isSpecified) {
-                        drawRect(resolvedSurfaceColor)
-                    }
-                }
+                onDrawSurface = drawSurface
             )
     } else {
         // No shared backdrop: fall back to a local one so the button still renders as glass
         val localBackdrop = rememberLayerBackdrop { drawContent() }
-        val fillColor = if (isLight) Color.White else Color.Black
-        val fillAlpha = if (isLight) 0.2f else 0.1f
 
         Modifier
             .shadow(
@@ -166,9 +180,10 @@ internal fun LiquidGlassButton(
                     blur(4f.dp.toPx())
                     if (style.lens) lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = style.chromaticAberration)
                 },
+                layerBlock = pressLayerBlock,
                 highlight = { Highlight.Default },
                 shadow = { Shadow(alpha = 0.30f) },
-                onDrawSurface = { drawRect(fillColor.copy(alpha = fillAlpha)) }
+                onDrawSurface = drawSurface
             )
     }
 
@@ -212,7 +227,7 @@ internal fun LiquidGlassSurface(
 ) {
     val backdrop = LocalGlassBackdrop.current
     val isLight = !isSystemInDarkTheme()
-    val surfaceColor = if (isLight) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.1f)
+    val surfaceColor = liquidGlassFrostColor(isLight)
 
     val glassModifier = if (backdrop != null) {
         // Shared backdrop: refract the real content behind the surface
@@ -231,8 +246,6 @@ internal fun LiquidGlassSurface(
     } else {
         // No shared backdrop: fall back to a local one so the surface still renders as glass
         val localBackdrop = rememberLayerBackdrop { drawContent() }
-        val fillColor = if (isLight) Color.White else Color.Black
-        val fillAlpha = if (isLight) 0.2f else 0.1f
 
         Modifier
             .shadow(
@@ -251,7 +264,7 @@ internal fun LiquidGlassSurface(
                 },
                 highlight = { Highlight.Default },
                 shadow = { Shadow(alpha = 0.30f) },
-                onDrawSurface = { drawRect(fillColor.copy(alpha = fillAlpha)) }
+                onDrawSurface = { drawRect(surfaceColor) }
             )
     }
 

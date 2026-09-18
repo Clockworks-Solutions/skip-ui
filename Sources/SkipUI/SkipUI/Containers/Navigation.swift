@@ -469,9 +469,9 @@ public struct NavigationStack : View, Renderable {
                                         }
                                         switch navigationIconButtonStyle {
                                         case Material3TopAppBarNavigationIconButtonStyle.filledIconButton:
-                                            LiquidGlassNavigationBackButton(isProminent: true, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see Navigation+LiquidGlass.swift
+                                            LiquidGlassNavigationBackButton(isProminent: true, colors: navigationIconButtonColors, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see Navigation+LiquidGlass.swift
                                         case Material3TopAppBarNavigationIconButtonStyle.iconButton:
-                                            LiquidGlassNavigationBackButton(isProminent: false, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see Navigation+LiquidGlass.swift
+                                            LiquidGlassNavigationBackButton(isProminent: false, colors: navigationIconButtonColors, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see Navigation+LiquidGlass.swift
                                         }
                                     }
                                     for renderable in topLeadingItems {

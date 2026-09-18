@@ -417,7 +417,7 @@ public struct TabView : View, Renderable {
                                         disabledIconColor: options.itemColors.disabledIconColor,
                                         disabledTextColor: options.itemColors.disabledTextColor
                                     )
-                                    if layoutType == NavigationSuiteType.NavigationBar { // Liquid Glass: glass tab bar replaces the Material bar, see TabView+LiquidGlass.swift
+                                    if layoutType == NavigationSuiteType.NavigationBar && isLiquidGlassTabBarEnabled() { // Liquid Glass: glass tab bar replaces the Material bar, see TabView+LiquidGlass.swift
                                         SideEffect {
                                             // The glass bar floats over the content, so the content is not inset for it
                                             bottomBarTopPx.value = Float(0.0)

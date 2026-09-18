@@ -14,6 +14,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonColors
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -27,12 +31,16 @@ import androidx.compose.ui.unit.sp
 ///
 /// Matches iOS: the pill appears only when there is a back button and the title is in the inline position, either
 /// because the title display mode is inline or because the large title has been scrolled more than halfway away.
+/// Never shown when the Liquid Glass tier is `NATIVE`, where the Material title is used.
 ///
 /// - Parameters:
 ///   - hasBackButton: Whether the top bar shows a back button.
 ///   - isInlineTitleDisplayMode: Whether the top bar uses the inline title display mode.
 ///   - collapsedFraction: How collapsed the large top bar is, from 0 (expanded) to 1 (collapsed).
-func shouldShowLiquidGlassNavigationTitle(hasBackButton: Bool, isInlineTitleDisplayMode: Bool, collapsedFraction: Float) -> Bool {
+@Composable func shouldShowLiquidGlassNavigationTitle(hasBackButton: Bool, isInlineTitleDisplayMode: Bool, collapsedFraction: Float) -> Bool {
+    guard EnvironmentValues.shared.liquidGlassTier() != LiquidGlassTier.NATIVE else {
+        return false
+    }
     return hasBackButton && (isInlineTitleDisplayMode || collapsedFraction > Float(0.5))
 }
 
@@ -74,13 +82,23 @@ func shouldShowLiquidGlassNavigationTitle(hasBackButton: Bool, isInlineTitleDisp
 
 /// Render the top bar back button as a `LiquidGlassButton`.
 ///
-/// Replaces the Material `FilledIconButton` / `IconButton`. The Material 3 navigation icon button colors are not applied.
+/// Replaces the Material `FilledIconButton` / `IconButton`, which are rendered instead when the Liquid Glass tier is
+/// `NATIVE`. The Material 3 navigation icon button colors only apply to the Material buttons.
 ///
 /// - Parameters:
 ///   - isProminent: `true` in place of `FilledIconButton`, `false` in place of `IconButton`.
+///   - colors: The Material 3 navigation icon button colors, if customized.
 ///   - onClick: The back action.
 ///   - icon: The back arrow icon.
-@Composable func LiquidGlassNavigationBackButton(isProminent: Bool, onClick: () -> Void, icon: @Composable () -> Void) {
+@Composable func LiquidGlassNavigationBackButton(isProminent: Bool, colors: IconButtonColors?, onClick: () -> Void, icon: @Composable () -> Void) {
+    guard EnvironmentValues.shared.liquidGlassTier() != LiquidGlassTier.NATIVE else {
+        if isProminent {
+            FilledIconButton(onClick: onClick, colors: colors ?? IconButtonDefaults.filledIconButtonColors()) { icon() }
+        } else {
+            IconButton(onClick: onClick, colors: colors ?? IconButtonDefaults.iconButtonColors()) { icon() }
+        }
+        return
+    }
     LiquidGlassButton(
         modifier: Modifier.padding(start = 8.dp),
         enabled: true,

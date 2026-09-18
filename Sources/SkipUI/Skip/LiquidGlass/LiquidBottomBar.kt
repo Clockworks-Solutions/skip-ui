@@ -204,9 +204,7 @@ internal fun LiquidGlassTabBar(
 
     // TODO: Take accentColor and containerColor from the environment tint and theme once finalized
     val accentColor = if (isLightTheme) Color(0xFF0088FF) else Color(0xFF0091FF)
-    val containerColor =
-        if (isLightTheme) Color(0xFFFAFAFA).copy(alpha = 0.4f)
-        else Color(0xFF121212).copy(alpha = 0.4f)
+    val containerColor = liquidGlassFrostColor(isLightTheme)
 
     val baseContentColor = if (isLightTheme) Color.Black else Color.White
     val isCompactLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
