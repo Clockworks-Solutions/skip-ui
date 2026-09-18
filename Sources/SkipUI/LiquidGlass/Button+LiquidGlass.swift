@@ -123,14 +123,6 @@ extension EnvironmentValues {
         get { builtinValue(key: "_material3GlassButton", defaultValue: { nil }) as! (@Composable (Material3GlassButtonOptions) -> Material3GlassButtonOptions)? }
         set { setBuiltinValue(key: "_material3GlassButton", value: newValue, defaultValue: { nil }) }
     }
-
-    /// Liquid Glass: a custom glass button renderer, called with the modifier, enabled state, action, label, and context.
-    ///
-    /// - Note: Not currently read by SkipUI; reserved for apps that render glass buttons themselves.
-    public var _glassButtonRenderer: (@Composable (Modifier, Bool, () -> Void, View, ComposeContext) -> Void)? {
-        get { builtinValue(key: "_glassButtonRenderer", defaultValue: { nil }) as! (@Composable (Modifier, Bool, () -> Void, View, ComposeContext) -> Void)? }
-        set { setBuiltinValue(key: "_glassButtonRenderer", value: newValue, defaultValue: { nil }) }
-    }
 }
 
 /// Options for rendering a `.glass` or `.glassProminent` button with `LiquidGlassButton`.

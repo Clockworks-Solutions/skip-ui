@@ -26,7 +26,7 @@ import com.blinkit.droiddex.constants.PerformanceLevel
 /**
  * How Liquid Glass is rendered on this device.
  */
-enum class LiquidGlassTier {
+internal enum class LiquidGlassTier {
     /** The complete glass effect: blur, lens refraction, chromatic aberration, highlights, and animations. */
     FULL,
 
@@ -67,7 +67,7 @@ enum class LiquidGlassTier {
  * @property chromaticAberration Whether the lens splits colors at the glass edge. Ignored without [lens].
  * @property accentLayer Whether the tab bar draws the hidden accent-tinted layer that the selection pill magnifies.
  */
-data class LiquidGlassStyle(
+internal data class LiquidGlassStyle(
     val lens: Boolean,
     val chromaticAberration: Boolean,
     val accentLayer: Boolean
@@ -91,7 +91,7 @@ data class LiquidGlassStyle(
  *
  * [tier] is Compose state, so composables that read it recompose when it resolves.
  */
-object LiquidGlassCapability {
+internal object LiquidGlassCapability {
     /** The tier to render with. [LiquidGlassTier.NATIVE] until resolved. */
     var tier: LiquidGlassTier by mutableStateOf(LiquidGlassTier.NATIVE)
         private set

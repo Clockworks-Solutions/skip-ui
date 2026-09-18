@@ -38,10 +38,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ProvideTextStyle
@@ -96,23 +92,13 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
- * Material icons for glass tabs, exposed as constants so Swift code in `#if SKIP` blocks can reference them
- * without importing Compose icon packages.
- */
-object LiquidIcons {
-    val welcome = Icons.Filled.Favorite
-    val home = Icons.Filled.Home
-    val settings = Icons.Filled.Settings
-}
-
-/**
  * A single tab in a [LiquidGlassTabBar].
  *
  * @property icon The tab icon, drawn in a fixed-size box.
  * @property title The tab label, drawn below the icon.
  * @property content The body shown when the tab is selected. Not used by [LiquidGlassTabView], where `TabView` renders the content.
  */
-class GlassTab(
+internal class GlassTab(
     val icon: @Composable () -> Unit,
     val title: @Composable () -> Unit,
     val content: @Composable () -> Unit
@@ -135,7 +121,7 @@ class GlassTab(
  * @param onTabSelected Called with the `TabView` index of the tab the user selects.
  */
 @Composable
-fun LiquidGlassTabView(
+internal fun LiquidGlassTabView(
     backdrop: Backdrop,
     tabIndices: kotlin.collections.List<Int>,
     selectedTabIndex: Int,
@@ -201,7 +187,7 @@ fun LiquidGlassTabView(
  * @param modifier The modifier to apply to the bar, usually a width.
  */
 @Composable
-fun LiquidGlassTabBar(
+internal fun LiquidGlassTabBar(
     backdrop: Backdrop,
     tabs: kotlin.collections.List<GlassTab>,
     selectedIndex: Int,

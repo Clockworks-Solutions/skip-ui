@@ -436,7 +436,7 @@ public struct NavigationStack : View, Renderable {
                             titleContentColor: MaterialTheme.colorScheme.onSurface
                         )
                         let topBarTitle: @Composable () -> Void = {
-                            // Liquid Glass: see ExtensionNavigation.swift
+                            // Liquid Glass: see Navigation+LiquidGlass.swift
                             if shouldShowLiquidGlassNavigationTitle(hasBackButton: !arguments.isRoot && arguments.toolbarPreferences.backButtonHidden != true, isInlineTitleDisplayMode: isInlineTitleDisplayMode, collapsedFraction: scrollBehavior.state.collapsedFraction) {
                                 LiquidGlassNavigationTitle(title: title, titleMenu: titleMenu, interactionSource: interactionSource, context: context)
                             } else if let titleMenu {
@@ -469,9 +469,9 @@ public struct NavigationStack : View, Renderable {
                                         }
                                         switch navigationIconButtonStyle {
                                         case Material3TopAppBarNavigationIconButtonStyle.filledIconButton:
-                                            LiquidGlassNavigationBackButton(isProminent: true, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see ExtensionNavigation.swift
+                                            LiquidGlassNavigationBackButton(isProminent: true, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see Navigation+LiquidGlass.swift
                                         case Material3TopAppBarNavigationIconButtonStyle.iconButton:
-                                            LiquidGlassNavigationBackButton(isProminent: false, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see ExtensionNavigation.swift
+                                            LiquidGlassNavigationBackButton(isProminent: false, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see Navigation+LiquidGlass.swift
                                         }
                                     }
                                     for renderable in topLeadingItems {

@@ -277,7 +277,7 @@ public struct TabView : View, Renderable {
         // Reduce the tab bar preferences outside the bar composable. Otherwise the reduced value may change
         // when the bottom bar recomposes
         let reducedTabBarPreferences = tabBarPreferences.value.reduced
-        let glassTabBarBackdrop = rememberLiquidGlassTabBarBackdrop() // Liquid Glass: tab content refracted by the glass tab bar, see ExTabView.swift
+        let glassTabBarBackdrop = rememberLiquidGlassTabBarBackdrop() // Liquid Glass: tab content refracted by the glass tab bar, see TabView+LiquidGlass.swift
 
         // When we layout, extend into the safe area if it is due to system bars, not into any app chrome. We extend
         // into the top bar too so that tab content can also extend into the top area without getting cut off during
@@ -417,7 +417,7 @@ public struct TabView : View, Renderable {
                                         disabledIconColor: options.itemColors.disabledIconColor,
                                         disabledTextColor: options.itemColors.disabledTextColor
                                     )
-                                    if layoutType == NavigationSuiteType.NavigationBar { // Liquid Glass: glass tab bar replaces the Material bar, see ExTabView.swift
+                                    if layoutType == NavigationSuiteType.NavigationBar { // Liquid Glass: glass tab bar replaces the Material bar, see TabView+LiquidGlass.swift
                                         SideEffect {
                                             // The glass bar floats over the content, so the content is not inset for it
                                             bottomBarTopPx.value = Float(0.0)
@@ -788,7 +788,7 @@ public protocol TabContent : View {
 public struct Tab : TabContent, Renderable {
     let label: ComposeBuilder
     let content: ComposeBuilder
-    public let value: Any? // Liquid Glass: public for custom tab bars, see ExtensionTabView.swift
+    let value: Any?
 
     public init(_ title: String, image: String, value: Any?, role: TabRole? = nil, @ViewBuilder content: () -> any View) {
         self.label = ComposeBuilder(view: Label(title, image: image))
@@ -896,7 +896,7 @@ public struct Tab : TabContent, Renderable {
         content.Compose(context: context)
     }
 
-    @Composable public func RenderTitle(context: ComposeContext) { // Liquid Glass: public, see ExtensionTabView.swift
+    @Composable func RenderTitle(context: ComposeContext) {
         let renderable = label.Evaluate(context: context, options: 0).firstOrNull() ?? EmptyView()
         let stripped = renderable.strip()
         if let label = stripped as? Label {
@@ -906,7 +906,7 @@ public struct Tab : TabContent, Renderable {
         }
     }
 
-    @Composable public func RenderImage(context: ComposeContext) { // Liquid Glass: public, see ExtensionTabView.swift
+    @Composable func RenderImage(context: ComposeContext) {
         let renderable = label.Evaluate(context: context, options: 0).firstOrNull() ?? EmptyView()
         let stripped = renderable.strip()
         // compute size of outer box (for padding)

@@ -60,7 +60,7 @@ import com.kyant.backdrop.shadow.Shadow
  * back to a local backdrop of their own drawing, which still looks like glass but does not show the
  * content behind it.
  */
-val LocalGlassBackdrop: ProvidableCompositionLocal<Backdrop?> = compositionLocalOf { null }
+internal val LocalGlassBackdrop: ProvidableCompositionLocal<Backdrop?> = compositionLocalOf { null }
 
 /**
  * A capsule button with a Liquid Glass look: blurred, lens-refracted backdrop, specular highlight,
@@ -82,7 +82,7 @@ val LocalGlassBackdrop: ProvidableCompositionLocal<Backdrop?> = compositionLocal
  * @param content The button label, laid out in a centered row.
  */
 @Composable
-fun LiquidGlassButton(
+internal fun LiquidGlassButton(
     modifier: Modifier,
     enabled: Boolean,
     isProminent: Boolean,
@@ -200,7 +200,7 @@ fun LiquidGlassButton(
  * @param content The surface content, laid out in a centered row.
  */
 @Composable
-fun LiquidGlassSurface(
+internal fun LiquidGlassSurface(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(percent = 50),
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
