@@ -58,7 +58,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -353,12 +352,6 @@ internal fun LiquidGlassTabBar(
                         .weight(1f)
                         .fillMaxHeight()
                         .sizeIn(minWidth = minimumTouchTarget, minHeight = minimumTouchTarget)
-                        // Without the accent layer, tint the tab under the pill here instead, fading to neutral
-                        // one tab away
-                        .then(
-                            if (style.accentLayer || proximity <= 0f) Modifier
-                            else Modifier.graphicsLayer(colorFilter = ColorFilter.tint(lerp(baseContentColor, accentColor, proximity)))
-                        )
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
@@ -367,8 +360,10 @@ internal fun LiquidGlassTabBar(
                         },
                     contentAlignment = Alignment.Center
                 ) {
+                    val contentColor = if (style.accentLayer) baseContentColor.copy(alpha = iconAlpha)
+                        else lerp(baseContentColor.copy(alpha = 0.5f), accentColor, proximity)
                     CompositionLocalProvider(
-                        LocalContentColor provides baseContentColor.copy(alpha = iconAlpha)
+                        LocalContentColor provides contentColor
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -422,8 +417,7 @@ internal fun LiquidGlassTabBar(
                 .then(interactiveHighlight.modifier)
                 .fillMaxWidth()
                 .height(56.dp)
-                .padding(horizontal = 4.dp)
-                .graphicsLayer(colorFilter = ColorFilter.tint(accentColor)),
+                .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -435,19 +429,21 @@ internal fun LiquidGlassTabBar(
                         .sizeIn(minWidth = minimumTouchTarget, minHeight = minimumTouchTarget),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(1.dp)
-                    ) {
-                        Box(modifier = Modifier.size(iconSize), contentAlignment = Alignment.Center) {
+                    CompositionLocalProvider(LocalContentColor provides accentColor) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            Box(modifier = Modifier.size(iconSize), contentAlignment = Alignment.Center) {
                                 Box(modifier = Modifier.graphicsLayer(scaleX = iconScale, scaleY = iconScale)) { tab.icon() }
                             }
-                        ProvideTextStyle(labelTextStyleBold) {
-                            Box(
-                                modifier = Modifier
-                                    .wrapContentHeight()
-                            ) {
-                                tab.title()
+                            ProvideTextStyle(labelTextStyleBold) {
+                                Box(
+                                    modifier = Modifier
+                                        .wrapContentHeight()
+                                ) {
+                                    tab.title()
+                                }
                             }
                         }
                     }
