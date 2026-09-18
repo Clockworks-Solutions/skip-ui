@@ -49,8 +49,10 @@ extension Button {
         action: (() -> Void)? = nil
     ) {
         guard EnvironmentValues.shared.liquidGlassTier() != LiquidGlassTier.NATIVE else {
+            let nativeStyle: Any = isProminent ? BorderedProminentButtonStyle() : BorderedButtonStyle()
+            let nativeStackedStyle = StackedButtonStyle(style: nativeStyle, parent: EnvironmentValues.shared._buttonStyle?.parent, source: ButtonStyleModifier(style: nativeStyle))
             EnvironmentValues.shared.setValues {
-                $0.set_buttonStyle(isProminent ? ButtonStyle.borderedProminent : ButtonStyle.bordered)
+                $0.set_buttonStyle(nativeStackedStyle)
                 return ComposeResult.ok
             } in: {
                 RenderButton(label: label, context: context, role: role, isEnabled: isEnabled, action: action ?? {})
