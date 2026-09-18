@@ -208,7 +208,8 @@ internal fun LiquidGlassTabBar(
 
     val baseContentColor = if (isLightTheme) Color.Black else Color.White
     val isCompactLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val iconSize = if (isCompactLandscape) 20.dp else 28.dp
+    val iconSize = if (isCompactLandscape) 22.dp else 30.dp
+    val iconScale = iconSize / 24.dp
     val labelTextStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal)
     val labelTextStyleBold = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     val minimumTouchTarget = 44.dp
@@ -371,14 +372,15 @@ internal fun LiquidGlassTabBar(
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                            verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
-                            Box(modifier = Modifier.size(iconSize)) { tab.icon() }
+                            Box(modifier = Modifier.size(iconSize), contentAlignment = Alignment.Center) {
+                                Box(modifier = Modifier.graphicsLayer(scaleX = iconScale, scaleY = iconScale)) { tab.icon() }
+                            }
                             ProvideTextStyle(labelTextStyle) {
                                 Box(
                                     modifier = Modifier
-                                        .wrapContentHeight() // Hug the text height
-                                        .padding(vertical = 2.dp) // Small breathing room instead of a fixed height
+                                        .wrapContentHeight()
                                 ) {
                                     tab.title()
                                 }
@@ -435,14 +437,15 @@ internal fun LiquidGlassTabBar(
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        Box(modifier = Modifier.size(iconSize)) { tab.icon() }
+                        Box(modifier = Modifier.size(iconSize), contentAlignment = Alignment.Center) {
+                                Box(modifier = Modifier.graphicsLayer(scaleX = iconScale, scaleY = iconScale)) { tab.icon() }
+                            }
                         ProvideTextStyle(labelTextStyleBold) {
                             Box(
                                 modifier = Modifier
-                                    .wrapContentHeight() // Hug the text height
-                                    .padding(vertical = 2.dp) // Small breathing room instead of a fixed height
+                                    .wrapContentHeight()
                             ) {
                                 tab.title()
                             }
