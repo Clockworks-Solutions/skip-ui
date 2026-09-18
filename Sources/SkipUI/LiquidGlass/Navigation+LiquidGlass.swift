@@ -12,13 +12,16 @@ import Foundation
 #if SKIP
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -56,17 +59,25 @@ import skip.ui.liquidglass.__
 ///   - interactionSource: The top bar's interaction source, shared so taps don't show an indication.
 @Composable func LiquidGlassNavigationTitle(title: Text, titleMenu: ToolbarTitleMenu?, interactionSource: MutableInteractionSource, context: ComposeContext) {
     if let titleMenu {
-        LiquidGlassSurface(
-            modifier: Modifier.clickable(interactionSource: interactionSource, indication: nil, onClick: { titleMenu.toggleMenu() }),
-            contentPadding: PaddingValues(horizontal: 16.dp, vertical: 6.dp)
+        Row(
+            modifier: Modifier
+                .clickable(interactionSource: interactionSource, indication: nil, onClick: { titleMenu.toggleMenu() })
+                .liquidGlassSurface()
+                .padding(PaddingValues(horizontal: 16.dp, vertical: 6.dp)),
+            horizontalArrangement: Arrangement.Center,
+            verticalAlignment: Alignment.CenterVertically
         ) {
             androidx.compose.material3.Text(title.localizedTextString(), maxLines: 1, overflow: TextOverflow.Ellipsis)
             Image(systemName: "chevron.down").accessibilityHidden(true).Compose(context: context)
         }
         titleMenu.Render(context: context)
     } else {
-        LiquidGlassSurface(
-            contentPadding: PaddingValues(horizontal: 16.dp, vertical: 6.dp)
+        Row(
+            modifier: Modifier
+                .liquidGlassSurface()
+                .padding(PaddingValues(horizontal: 16.dp, vertical: 6.dp)),
+            horizontalArrangement: Arrangement.Center,
+            verticalAlignment: Alignment.CenterVertically
         ) {
             androidx.compose.material3.Text(
                 text = title.localizedTextString(),

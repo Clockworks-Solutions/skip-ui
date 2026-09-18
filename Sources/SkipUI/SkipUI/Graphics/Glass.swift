@@ -8,17 +8,27 @@ import skip.model.StateTracking
 import struct CoreGraphics.CGFloat
 #endif
 
-public struct Glass : Equatable, Sendable {
+public struct Glass : Equatable, @unchecked Sendable { // Immutable; `Color` is not `Sendable`
+    /// The color the glass is tinted with, if any.
+    let tintColor: Color?
+    /// Whether the glass reacts to touch.
+    let isInteractive: Bool
+
+    init(tintColor: Color? = nil, isInteractive: Bool = false) {
+        self.tintColor = tintColor
+        self.isInteractive = isInteractive
+    }
+
     public static var regular: Glass {
         return Glass()
     }
 
     public func tint(_ color: Color?) -> Glass {
-        return self
+		return .init(tintColor: color, isInteractive: isInteractive)
     }
 
     public func interactive(_ isEnabled: Bool = true) -> Glass {
-        return self
+		return .init(tintColor: tintColor, isInteractive: isEnabled)
     }
 }
 
@@ -49,9 +59,18 @@ public struct GlassEffectTransition : Sendable {
 }
 
 extension View {
-    @available(*, unavailable)
     public func glassEffect(_ glass: Glass = .regular, in shape: some Shape = .capsule, isEnabled: Bool = true) -> some View {
+        #if SKIP
+        guard isEnabled else {
+            return self
+        }
+        // Liquid Glass: see Glass+LiquidGlass.swift
+        return ModifiedContent(content: self, modifier: RenderModifier {
+            return $0.modifier.then(liquidGlassEffectModifier(glass, in: shape))
+        })
+        #else
         return self
+        #endif
     }
 
     public func glassEffectTransition(_ transition: GlassEffectTransition, isEnabled: Bool = true) -> some View {
