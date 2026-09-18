@@ -4,13 +4,11 @@
 // https://github.com/Kyant0/AndroidLiquidGlass
 package skip.ui.liquidglass
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -33,7 +30,6 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
@@ -74,7 +70,7 @@ internal fun liquidGlassFrostColor(isLight: Boolean): Color =
 
 /**
  * A capsule button with a Liquid Glass look: blurred, lens-refracted backdrop, specular highlight,
- * and a squash-and-stretch press animation with a touch glow.
+ * and a springy press animation with a touch glow.
  *
  * Backs the `.glass` and `.glassProminent` button styles.
  *
@@ -110,12 +106,6 @@ internal fun LiquidGlassButton(
     val animationScope = rememberCoroutineScope()
     val highlight = remember(animationScope) { InteractiveHighlight(animationScope) }
     val resolvedInteractionSource = interactionSource ?: remember { MutableInteractionSource() }
-    val isPressed by resolvedInteractionSource.collectIsPressedAsState()
-    val press by animateFloatAsState(
-        targetValue = if (isPressed) 1f else 0f,
-        animationSpec = spring(dampingRatio = 1f, stiffness = 1000f, visibilityThreshold = 0.001f),
-        label = "GlassButtonPress"
-    )
 
     val isLight = !isSystemInDarkTheme()
 
@@ -138,13 +128,6 @@ internal fun LiquidGlassButton(
         }
     }
 
-    // Squash and stretch: widen and flatten while pressed
-    val pressLayerBlock: GraphicsLayerScope.() -> Unit = {
-        val s = 1f + 0.06f * press
-        scaleX = s
-        scaleY = 1f / s
-    }
-
     val glassModifier = if (backdrop != null) {
         // Shared backdrop: refract the real content behind the button
         Modifier
@@ -156,7 +139,6 @@ internal fun LiquidGlassButton(
                     blur(4f.dp.toPx())
                     if (style.lens) lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = style.chromaticAberration)
                 },
-                layerBlock = pressLayerBlock,
                 highlight = { Highlight.Default },
                 shadow = { Shadow(alpha = 0.30f) },
                 onDrawSurface = drawSurface
@@ -180,7 +162,6 @@ internal fun LiquidGlassButton(
                     blur(4f.dp.toPx())
                     if (style.lens) lens(12f.dp.toPx(), 24f.dp.toPx(), chromaticAberration = style.chromaticAberration)
                 },
-                layerBlock = pressLayerBlock,
                 highlight = { Highlight.Default },
                 shadow = { Shadow(alpha = 0.30f) },
                 onDrawSurface = drawSurface
@@ -189,9 +170,17 @@ internal fun LiquidGlassButton(
 
     Row(
         modifier = modifier
+            // Grow the glass and label together while pressed, by up to 12dp in width and at most 15%, springing
+            // back on release
+            .graphicsLayer {
+                val growth = (12f.dp.toPx() / size.width.coerceAtLeast(1f)).coerceAtMost(0.15f)
+                val scale = 1f + growth * highlight.pressProgress
+                scaleX = scale
+                scaleY = scale
+            }
             .then(glassModifier)
             .then(highlight.modifier)
-            .then(highlight.gestureModifier)
+            .then(if (enabled) highlight.gestureModifier else Modifier)
             .clickable(
                 enabled = enabled,
                 interactionSource = resolvedInteractionSource,

@@ -26,7 +26,7 @@ extension Button {
     /// Draws the label on a `LiquidGlassButton` capsule, which samples `LocalGlassBackdrop` when a presentation provides one.
     ///
     /// Label color, in order of precedence:
-    /// - `onError` for destructive buttons
+    /// - For destructive buttons, `onError` over the error-tinted glass of prominent buttons, otherwise `error`
     /// - The environment `foregroundStyle`
     /// - White for prominent buttons, to read over the tinted glass
     /// - The environment `tint`
@@ -63,7 +63,7 @@ extension Button {
 
         var foregroundStyle: ShapeStyle
         if role == .destructive {
-            foregroundStyle = Color(colorImpl: { MaterialTheme.colorScheme.onError })
+			foregroundStyle = isProminent ? Color(colorImpl: { MaterialTheme.colorScheme.onError }) : Color(colorImpl: { MaterialTheme.colorScheme.error })
         } else if let envForegroundStyle = EnvironmentValues.shared._foregroundStyle {
             foregroundStyle = envForegroundStyle
         } else if isProminent {
