@@ -436,10 +436,7 @@ public struct NavigationStack : View, Renderable {
                             titleContentColor: MaterialTheme.colorScheme.onSurface
                         )
                         let topBarTitle: @Composable () -> Void = {
-                            // Liquid Glass: see Navigation+LiquidGlass.swift
-                            if shouldShowLiquidGlassNavigationTitle(hasBackButton: !arguments.isRoot && arguments.toolbarPreferences.backButtonHidden != true, isInlineTitleDisplayMode: isInlineTitleDisplayMode, collapsedFraction: scrollBehavior.state.collapsedFraction) {
-                                LiquidGlassNavigationTitle(title: title, titleMenu: titleMenu, interactionSource: interactionSource, context: context)
-                            } else if let titleMenu {
+                            if let titleMenu {
                                 let menuModifier = Modifier.clickable(interactionSource: interactionSource, indication: nil, onClick: {
                                     titleMenu.toggleMenu()
                                 })

@@ -4,93 +4,22 @@
 //
 //  Created by Dhruv Chhatbar on 17/09/26.
 //
-//  Liquid Glass (Clockworks fork): glass title pill and back button for the `NavigationStack` top bar.
+//  Liquid Glass (Clockworks fork): glass back button for the `NavigationStack` top bar.
 //
 
 #if !SKIP_BRIDGE
 import Foundation
 #if SKIP
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import skip.ui.liquidglass.__
-
-/// Whether the navigation title should be drawn in a Liquid Glass pill.
-///
-/// Matches iOS: the pill appears only when there is a back button and the title is in the inline position, either
-/// because the title display mode is inline or because the large title has been scrolled more than halfway away.
-/// Never shown when the Liquid Glass tier is `NATIVE`, where the Material title is used.
-///
-/// - Parameters:
-///   - hasBackButton: Whether the top bar shows a back button.
-///   - isInlineTitleDisplayMode: Whether the top bar uses the inline title display mode.
-///   - collapsedFraction: How collapsed the large top bar is, from 0 (expanded) to 1 (collapsed).
-@Composable func shouldShowLiquidGlassNavigationTitle(hasBackButton: Bool, isInlineTitleDisplayMode: Bool, collapsedFraction: Float) -> Bool {
-    guard EnvironmentValues.shared.liquidGlassTier() != LiquidGlassTier.NATIVE else {
-        return false
-    }
-    return hasBackButton && (isInlineTitleDisplayMode || collapsedFraction > Float(0.5))
-}
-
-/// Render the navigation title in a `LiquidGlassSurface` pill.
-///
-/// With a title menu, the pill shows the title and a chevron and toggles the menu when tapped. Without one, the title is
-/// drawn at 14sp semibold.
-///
-/// - Parameters:
-///   - title: The navigation title.
-///   - titleMenu: The toolbar title menu, if any.
-///   - interactionSource: The top bar's interaction source, shared so taps don't show an indication.
-@Composable func LiquidGlassNavigationTitle(title: Text, titleMenu: ToolbarTitleMenu?, interactionSource: MutableInteractionSource, context: ComposeContext) {
-    if let titleMenu {
-        Row(
-            modifier: Modifier
-                .clickable(interactionSource: interactionSource, indication: nil, onClick: { titleMenu.toggleMenu() })
-                .liquidGlassSurface()
-                .padding(PaddingValues(horizontal: 16.dp, vertical: 6.dp)),
-            horizontalArrangement: Arrangement.Center,
-            verticalAlignment: Alignment.CenterVertically
-        ) {
-            androidx.compose.material3.Text(title.localizedTextString(), maxLines: 1, overflow: TextOverflow.Ellipsis)
-            Image(systemName: "chevron.down").accessibilityHidden(true).Compose(context: context)
-        }
-        titleMenu.Render(context: context)
-    } else {
-        Row(
-            modifier: Modifier
-                .liquidGlassSurface()
-                .padding(PaddingValues(horizontal: 16.dp, vertical: 6.dp)),
-            horizontalArrangement: Arrangement.Center,
-            verticalAlignment: Alignment.CenterVertically
-        ) {
-            androidx.compose.material3.Text(
-                text = title.localizedTextString(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontStyle = FontStyle.Normal, // or FontStyle.Italic
-                fontFamily = FontFamily.Default // or a custom font family
-            )
-        }
-    }
-}
 
 /// Render the top bar back button as a `LiquidGlassButton`.
 ///
