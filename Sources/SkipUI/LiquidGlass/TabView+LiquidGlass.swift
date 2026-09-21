@@ -13,24 +13,42 @@ import Foundation
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import skip.ui.liquidglass.__
 
-/// Remember the backdrop that records `TabView` content for the glass tab bar.
-@Composable func rememberLiquidGlassTabBarBackdrop() -> LayerBackdrop {
-    return rememberLayerBackdrop()
+/// Remember the state one `TabView` shares with its glass tab bar: the backdrop that records the tab content, and
+/// whether the bar is minimized.
+@Composable func rememberLiquidGlassTabBarState() -> LiquidGlassTabBarState {
+    return skip.ui.liquidglass.rememberLiquidGlassTabBarState()
 }
 
-/// A modifier that records the tab content it is applied to into the glass tab bar backdrop, or no modifier when the
-/// Liquid Glass tier is `NATIVE` and the Material bar is shown.
-@Composable func liquidGlassTabBarBackdropModifier(_ backdrop: LayerBackdrop) -> Modifier {
+/// A modifier for the tab content: it records the content into the glass tab bar backdrop, and watches it scroll so the
+/// bar can minimize when `tabBarMinimizeBehavior(_:)` asks it to. No modifier when the Liquid Glass tier is `NATIVE`
+/// and the Material bar is shown.
+@Composable func liquidGlassTabBarContentModifier(_ state: LiquidGlassTabBarState) -> Modifier {
     guard isLiquidGlassTabBarEnabled() else {
         return Modifier
     }
-    return Modifier.layerBackdrop(backdrop)
+    let minimizeConnection = rememberGlassTabBarMinimizeConnection(state: state, behavior: liquidGlassTabBarMinimizeBehavior())
+    return Modifier.layerBackdrop(state.backdrop).nestedScroll(minimizeConnection)
+}
+
+/// The glass tab bar's reaction to scrolling, from the `tabBarMinimizeBehavior(_:)` environment value.
+///
+/// `.automatic` never minimizes, as it does on iOS today, where minimizing is opt-in.
+@Composable func liquidGlassTabBarMinimizeBehavior() -> GlassTabBarMinimizeBehavior {
+    let behavior = EnvironmentValues.shared.tabBarMinimizeBehavior
+    if behavior == TabBarMinimizeBehavior.onScrollDown {
+        return GlassTabBarMinimizeBehavior.ON_SCROLL_DOWN
+    } else if behavior == TabBarMinimizeBehavior.onScrollUp {
+        return GlassTabBarMinimizeBehavior.ON_SCROLL_UP
+    } else {
+        return GlassTabBarMinimizeBehavior.NEVER
+    }
 }
 
 /// Whether the `TabView` bottom bar renders as the glass tab bar, rather than the Material `NavigationBar` for the
@@ -54,12 +72,12 @@ import skip.ui.liquidglass.__
 /// non-color background is ignored for now.
 ///
 /// - Parameters:
-///   - backdrop: The recorded tab content that the bar refracts.
+///   - state: The bar state shared with the `TabView`.
 ///   - tabs: The `TabView` tabs, indexed like its routes.
 ///   - selectedTabIndex: The index of the selected tab.
 ///   - options: The resolved navigation bar options.
 ///   - tabBarPreferences: The reduced tab bar preferences, for an app-specified background.
-@Composable func LiquidGlassTabViewBar(backdrop: Backdrop, tabs: kotlin.collections.List<Tab?>, selectedTabIndex: Int, options: Material3NavigationBarOptions, tabBarPreferences: ToolbarBarPreferences) {
+@Composable func LiquidGlassTabViewBar(state: LiquidGlassTabBarState, tabs: kotlin.collections.List<Tab?>, selectedTabIndex: Int, options: Material3NavigationBarOptions, tabBarPreferences: ToolbarBarPreferences) {
     let tabIndices = mutableListOf<Int>()
     for tabIndex in 0..<tabs.size {
         if tabs[tabIndex] == nil || tabs[tabIndex]?.isHidden == true {
@@ -86,7 +104,23 @@ import skip.ui.liquidglass.__
     }
     // Only a background the app asked for, so scrolling content does not raise an opaque system background over the glass
     let backgroundColor = tabBarPreferences.backgroundVisibility == Visibility.hidden ? nil : tabBarPreferences.background?.asColor(opacity: 1.0, animationContext: nil)
-    LiquidGlassTabView(backdrop: backdrop, tabIndices: tabIndices, selectedTabIndex: selectedTabIndex, icon: options.itemIcon, label: itemLabel, isEnabled: isTabEnabled, onTabSelected: options.onItemClick, accentColor: accentColor, backgroundColor: backgroundColor ?? androidx.compose.ui.graphics.Color.Unspecified, contentColor: options.contentColor)
+    LiquidGlassTabView(state: state, tabIndices: tabIndices, selectedTabIndex: selectedTabIndex, icon: options.itemIcon, label: itemLabel, isEnabled: isTabEnabled, onTabSelected: options.onItemClick, accentColor: accentColor, backgroundColor: backgroundColor ?? androidx.compose.ui.graphics.Color.Unspecified, contentColor: options.contentColor)
+}
+
+// MARK: - EnvironmentValues: tab bar minimize behavior
+
+struct TabBarMinimizeBehaviorKey: EnvironmentKey {
+    static let defaultValue: TabBarMinimizeBehavior = .automatic
+}
+
+extension EnvironmentValues {
+    /// How the `TabView` bar in this subtree reacts to scrolling, from `tabBarMinimizeBehavior(_:)`.
+    ///
+    /// Only the glass tab bar acts on it; the Material `NavigationBar` keeps its size.
+    var tabBarMinimizeBehavior: TabBarMinimizeBehavior {
+        get { self[TabBarMinimizeBehaviorKey.self] }
+        set { self[TabBarMinimizeBehaviorKey.self] = newValue }
+    }
 }
 #endif
 #endif

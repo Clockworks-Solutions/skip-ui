@@ -277,7 +277,7 @@ public struct TabView : View, Renderable {
         // Reduce the tab bar preferences outside the bar composable. Otherwise the reduced value may change
         // when the bottom bar recomposes
         let reducedTabBarPreferences = tabBarPreferences.value.reduced
-        let glassTabBarBackdrop = rememberLiquidGlassTabBarBackdrop() // Liquid Glass: tab content refracted by the glass tab bar, see TabView+LiquidGlass.swift
+        let glassTabBarState = rememberLiquidGlassTabBarState() // Liquid Glass: backdrop and minimized state of the glass tab bar, see TabView+LiquidGlass.swift
 
         // When we layout, extend into the safe area if it is due to system bars, not into any app chrome. We extend
         // into the top bar too so that tab content can also extend into the top area without getting cut off during
@@ -423,7 +423,7 @@ public struct TabView : View, Renderable {
                                             bottomBarTopPx.value = Float(0.0)
                                             bottomBarHeightPx.value = Float(0.0)
                                         }
-										LiquidGlassTabViewBar(backdrop: glassTabBarBackdrop, tabs: tabs, selectedTabIndex: selectedTabIndex.value, options: options, tabBarPreferences: reducedTabBarPreferences)
+										LiquidGlassTabViewBar(state: glassTabBarState, tabs: tabs, selectedTabIndex: selectedTabIndex.value, options: options, tabBarPreferences: reducedTabBarPreferences)
                                     } else if layoutType == NavigationSuiteType.NavigationBar {
                                         NavigationBar(modifier: options.modifier.semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar"), containerColor: options.containerColor, contentColor: options.contentColor, tonalElevation: options.tonalElevation) {
                                             for tabIndex in 0..<tabRenderables.size {
@@ -546,7 +546,7 @@ public struct TabView : View, Renderable {
                             let transitions = EnvironmentValues.shared._tabViewTransitions?(defaults) ?? defaults
                             NavDisplay(
                                 entries: activeEntries,
-                                modifier: Modifier.fillMaxSize().then(liquidGlassTabBarBackdropModifier(glassTabBarBackdrop)), // Liquid Glass: record content for the glass tab bar
+                                modifier: Modifier.fillMaxSize().then(liquidGlassTabBarContentModifier(glassTabBarState)), // Liquid Glass: record content for the glass tab bar
                                 onBack: {
                                     if activeStack.size > 1 {
                                         activeStack.removeLastOrNull()
@@ -764,10 +764,8 @@ public struct TabBarMinimizeBehavior : RawRepresentable, Hashable {
     }
 
     public static let automatic = TabBarMinimizeBehavior(rawValue: 1)
-    @available(*, unavailable)
-    public static let onScrollDown = TabBarMinimizeBehavior(rawValue: 2)
-    @available(*, unavailable)
-    public static let onScrollUp = TabBarMinimizeBehavior(rawValue: 3)
+    public static let onScrollDown = TabBarMinimizeBehavior(rawValue: 2) // Liquid Glass: supported by the glass tab bar, see TabView+LiquidGlass.swift
+    public static let onScrollUp = TabBarMinimizeBehavior(rawValue: 3) // Liquid Glass: supported by the glass tab bar, see TabView+LiquidGlass.swift
     public static let never = TabBarMinimizeBehavior(rawValue: 4)
 }
 
@@ -1271,7 +1269,11 @@ extension View {
     }
 
     public func tabBarMinimizeBehavior(_ behavior: TabBarMinimizeBehavior) -> some View {
+        #if SKIP
+        return environment(\.tabBarMinimizeBehavior, behavior, affectsEvaluate: false) // Liquid Glass: the glass tab bar minimizes on scroll, see TabView+LiquidGlass.swift
+        #else
         return self
+        #endif
     }
 
     @available(*, unavailable)

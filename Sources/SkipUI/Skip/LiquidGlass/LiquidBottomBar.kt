@@ -64,6 +64,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -94,6 +95,13 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
+/** The width of the glass tab bar once it is minimized: room for one tab icon. */
+internal val liquidGlassMinimizedTabBarWidth = 76.dp
+
+/** The height of the glass tab bar at full size, and minimized. */
+internal val liquidGlassTabBarHeight = 65.dp
+internal val liquidGlassMinimizedTabBarHeight = 50.dp
+
 /**
  * A single tab in a [LiquidGlassTabBar].
  *
@@ -119,7 +127,7 @@ internal class GlassTab(
  * upward from the bottom edge, above the system navigation bar, and is sized to about 88dp per tab, capped to the
  * available width minus 24dp on each side.
  *
- * @param backdrop The recorded tab content that the bar refracts.
+ * @param state The bar state shared with the `TabView`, holding the backdrop it refracts and its minimized state.
  * @param tabIndices The `TabView` indices of the visible tabs, in display order. Hidden and conditional tabs are omitted.
  * @param selectedTabIndex The `TabView` index of the selected tab.
  * @param icon Renders the icon for a `TabView` index.
@@ -135,7 +143,7 @@ internal class GlassTab(
  */
 @Composable
 internal fun LiquidGlassTabView(
-    backdrop: Backdrop,
+    state: LiquidGlassTabBarState,
     tabIndices: kotlin.collections.List<Int>,
     selectedTabIndex: Int,
     icon: @Composable (Int) -> Unit,
@@ -154,6 +162,13 @@ internal fun LiquidGlassTabView(
     }
     val selectedPosition = tabIndices.indexOf(selectedTabIndex).coerceAtLeast(0)
 
+    // 0 at full size, 1 minimized to a pill holding only the selected tab, as the iOS bar does when scrolled
+    val minimizeProgress by animateFloatAsState(
+        targetValue = if (state.isMinimized) 1f else 0f,
+        animationSpec = spring(0.9f, 400f, 0.001f),
+        label = "minimize"
+    )
+
     // Zero-height slot so the TabView gives its content the full height; the bar overflows upward over the content
     Box(modifier = Modifier.fillMaxWidth().height(0.dp).zIndex(1f)) {
         // Measure available width, then size the bar to content (ideal 88dp per tab),
@@ -170,16 +185,20 @@ internal fun LiquidGlassTabView(
             val idealPx = with(density) { (88.dp * tabs.size).toPx() }
             val maxPx = (constraints.maxWidth.toFloat() - with(density) { 48.dp.toPx() })
                 .coerceAtLeast(0f)
-            val barWidth = with(density) { idealPx.coerceAtMost(maxPx).toDp() }
+            val fullBarWidth = with(density) { idealPx.coerceAtMost(maxPx).toDp() }
+            // Minimized, the bar is just wide enough for the selected tab's icon
+            val barWidth = fullBarWidth * (1f - minimizeProgress) + liquidGlassMinimizedTabBarWidth * minimizeProgress
             LiquidGlassTabBar(
-                backdrop = backdrop,
+                backdrop = state.backdrop,
                 tabs = tabs,
                 selectedIndex = selectedPosition,
                 onTabSelected = { position -> onTabSelected(tabIndices[position]) },
                 modifier = Modifier.width(barWidth),
                 accentColor = accentColor,
                 backgroundColor = backgroundColor,
-                contentColor = contentColor
+                contentColor = contentColor,
+                minimizeProgress = minimizeProgress,
+                onExpand = { state.isMinimized = false }
             )
         }
     }
@@ -213,6 +232,9 @@ internal fun LiquidGlassTabView(
  * @param backgroundColor A color drawn over the glass frost, leaving the bar clear when it is `Color.Unspecified` or
  *   fully transparent. An opaque color makes the bar opaque, as it does for the Material bar.
  * @param contentColor The unselected icon and label color. `Color.Unspecified` uses black or white for the theme.
+ * @param minimizeProgress 0 draws the full bar, 1 the minimized pill: labels gone, unselected tabs collapsed away, and
+ *   only the selected icon left. Values between animate that.
+ * @param onExpand Called when the user taps the minimized bar, which restores it on iOS.
  */
 @Composable
 internal fun LiquidGlassTabBar(
@@ -224,9 +246,13 @@ internal fun LiquidGlassTabBar(
     style: LiquidGlassStyle = LiquidGlassStyle.current,
     accentColor: Color = Color.Unspecified,
     backgroundColor: Color = Color.Unspecified,
-    contentColor: Color = Color.Unspecified
+    contentColor: Color = Color.Unspecified,
+    minimizeProgress: Float = 0f,
+    onExpand: (() -> Unit)? = null
 ) {
     if (tabs.isEmpty()) return
+
+    val isMinimized = minimizeProgress > 0.5f
 
     val isLightTheme = !isSystemInDarkTheme()
 
@@ -249,7 +275,8 @@ internal fun LiquidGlassTabBar(
     val iconTextStyle = LocalTextStyle.current.copy(fontSize = (iconSize.value / 1.5f).sp)
     val labelTextStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal)
     val labelTextStyleBold = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-    val minimumTouchTarget = 44.dp
+    val minimumTouchTarget = 44.dp * (1f - minimizeProgress)
+    val barHeight = liquidGlassTabBarHeight * (1f - minimizeProgress) + liquidGlassMinimizedTabBarHeight * minimizeProgress
     val disabledContentAlpha = 0.38f // Material's disabled content alpha, applied over the bar's already-faded tabs
 
     val tabsBackdrop = rememberLayerBackdrop()
@@ -394,7 +421,7 @@ internal fun LiquidGlassTabBar(
                 )
                 .then(interactiveHighlight.modifier)
                 .fillMaxWidth()
-                .height(65.dp)
+                .height(barHeight)
                 .padding(5.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
@@ -411,21 +438,35 @@ internal fun LiquidGlassTabBar(
                     label = "Alpha_$index"
                 )
 
+                // Minimizing collapses every tab but the selected one, leaving its icon alone in the pill
+                val isMinimizingAway = index != currentIndex
+                val tabWeight = if (isMinimizingAway) (1f - minimizeProgress).coerceAtLeast(0.0001f) else 1f
+                val tabAlpha = when {
+                    !tab.isEnabled -> disabledContentAlpha
+                    isMinimizingAway -> 1f - minimizeProgress
+                    else -> 1f
+                }
+
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(tabWeight)
                         .fillMaxHeight()
                         .sizeIn(minWidth = minimumTouchTarget, minHeight = minimumTouchTarget)
                         // Fade the whole tab rather than only its content color, so an icon that draws its own colors dims too
-                        .alpha(if (tab.isEnabled) 1f else disabledContentAlpha)
+                        .alpha(tabAlpha)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                             enabled = tab.isEnabled
                         ) {
-                            currentIndex = index
-                            // Report every tap, including one on the selected tab, as the Material bar does
-                            latestOnTabSelected.value(index)
+                            if (isMinimized && onExpand != null) {
+                                // A tap on the minimized bar restores it, rather than changing tab
+                                onExpand()
+                            } else {
+                                currentIndex = index
+                                // Report every tap, including one on the selected tab, as the Material bar does
+                                latestOnTabSelected.value(index)
+                            }
                         },
                     contentAlignment = Alignment.Center
                 ) {
@@ -447,6 +488,7 @@ internal fun LiquidGlassTabBar(
                                 Box(
                                     modifier = Modifier
                                         .wrapContentHeight()
+                                        .minimizedLabel(minimizeProgress)
                                 ) {
                                     tab.title()
                                 }
@@ -487,15 +529,16 @@ internal fun LiquidGlassTabBar(
                 )
                 .then(interactiveHighlight.modifier)
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(barHeight - 9.dp)
                 .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            tabs.forEach { tab ->
+            tabs.forEachIndexed { index, tab ->
+                val isMinimizingAway = index != currentIndex
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(if (isMinimizingAway) (1f - minimizeProgress).coerceAtLeast(0.0001f) else 1f)
                         .fillMaxHeight()
                         .sizeIn(minWidth = minimumTouchTarget, minHeight = minimumTouchTarget)
                         .alpha(if (tab.isEnabled) 1f else disabledContentAlpha),
@@ -513,6 +556,7 @@ internal fun LiquidGlassTabBar(
                                 Box(
                                     modifier = Modifier
                                         .wrapContentHeight()
+                                        .minimizedLabel(minimizeProgress)
                                 ) {
                                     tab.title()
                                 }
@@ -526,8 +570,10 @@ internal fun LiquidGlassTabBar(
         // ── Layer 3: sliding liquid pill + drag surface ─────────────────────
         // `anim.modifier` is what actually receives touch drags; without it
         // attached here, DampedDragAnimation never sees pointer input at all.
-        Box(
+        // Minimized, the bar itself is the pill, so this layer fades out and stops taking touches.
+        if (!isMinimized) Box(
             modifier = Modifier
+                .alpha(1f - minimizeProgress)
                 .padding(horizontal = 4.dp)
                 .graphicsLayer {
                     translationX =
@@ -582,8 +628,26 @@ internal fun LiquidGlassTabBar(
                         drawRect(Color.Black.copy(alpha = 0.03f * progress))
                     }
                 )
-                .height(56.dp)
+                .height(barHeight - 9.dp)
                 .fillMaxWidth(1f / tabs.size)
         )
     }
+}
+
+/**
+ * Collapses a tab label as the bar minimizes: it fades out and gives up its height, so the icon settles into the
+ * middle of the shrinking bar instead of the label leaving a gap behind it.
+ */
+private fun Modifier.minimizedLabel(progress: Float): Modifier {
+    if (progress <= 0f) {
+        return this
+    }
+    return this
+        .alpha(1f - progress)
+        .layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            layout(placeable.width, (placeable.height * (1f - progress)).roundToInt()) {
+                placeable.place(0, 0)
+            }
+        }
 }
