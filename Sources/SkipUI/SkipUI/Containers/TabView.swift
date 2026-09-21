@@ -423,7 +423,7 @@ public struct TabView : View, Renderable {
                                             bottomBarTopPx.value = Float(0.0)
                                             bottomBarHeightPx.value = Float(0.0)
                                         }
-										LiquidGlassTabViewBar(backdrop: glassTabBarBackdrop, tabs: tabs, selectedTabIndex: selectedTabIndex.value, options: options)
+										LiquidGlassTabViewBar(backdrop: glassTabBarBackdrop, tabs: tabs, selectedTabIndex: selectedTabIndex.value, options: options, tabBarPreferences: reducedTabBarPreferences)
                                     } else if layoutType == NavigationSuiteType.NavigationBar {
                                         NavigationBar(modifier: options.modifier.semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar"), containerColor: options.containerColor, contentColor: options.contentColor, tonalElevation: options.tonalElevation) {
                                             for tabIndex in 0..<tabRenderables.size {

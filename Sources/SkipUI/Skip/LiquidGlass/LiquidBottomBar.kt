@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -58,7 +59,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
@@ -97,11 +100,14 @@ import kotlinx.coroutines.launch
  * @property icon The tab icon, drawn in a fixed-size box.
  * @property title The tab label, drawn below the icon.
  * @property content The body shown when the tab is selected. Not used by [LiquidGlassTabView], where `TabView` renders the content.
+ * @property isEnabled Whether the tab can be selected. A disabled tab is dimmed, ignores taps, and the selection pill
+ *   snaps past it, matching the Material `NavigationBarItem` for a `.disabled` tab.
  */
 internal class GlassTab(
     val icon: @Composable () -> Unit,
     val title: @Composable () -> Unit,
-    val content: @Composable () -> Unit
+    val content: @Composable () -> Unit,
+    val isEnabled: Boolean = true
 )
 
 /**
@@ -118,7 +124,14 @@ internal class GlassTab(
  * @param selectedTabIndex The `TabView` index of the selected tab.
  * @param icon Renders the icon for a `TabView` index.
  * @param label Renders the title for a `TabView` index, if tabs have titles.
- * @param onTabSelected Called with the `TabView` index of the tab the user selects.
+ * @param isEnabled Whether the tab at a `TabView` index can be selected.
+ * @param onTabSelected Called with the `TabView` index of the tab the user selects, on every tap, including a tap on
+ *   the already-selected tab.
+ * @param accentColor The selected tab color, from the `TabView` tint or the app accent color.
+ *   `Color.Unspecified` falls back to the default blue.
+ * @param backgroundColor A color drawn over the glass frost, from `.toolbarBackground(_:for: .tabBar)`.
+ *   `Color.Unspecified` or a fully transparent color leaves the bar clear.
+ * @param contentColor The unselected icon and label color. `Color.Unspecified` uses black or white for the theme.
  */
 @Composable
 internal fun LiquidGlassTabView(
@@ -127,13 +140,17 @@ internal fun LiquidGlassTabView(
     selectedTabIndex: Int,
     icon: @Composable (Int) -> Unit,
     label: (@Composable (Int) -> Unit)?,
-    onTabSelected: (Int) -> Unit
+    isEnabled: (Int) -> Boolean,
+    onTabSelected: (Int) -> Unit,
+    accentColor: Color = Color.Unspecified,
+    backgroundColor: Color = Color.Unspecified,
+    contentColor: Color = Color.Unspecified
 ) {
     if (tabIndices.isEmpty()) return
 
     // Map TabView indices to glass tabs; LiquidGlassTabBar works in display positions
     val tabs = tabIndices.map { tabIndex ->
-        GlassTab(icon = { icon(tabIndex) }, title = { label?.invoke(tabIndex) }, content = {})
+        GlassTab(icon = { icon(tabIndex) }, title = { label?.invoke(tabIndex) }, content = {}, isEnabled = isEnabled(tabIndex))
     }
     val selectedPosition = tabIndices.indexOf(selectedTabIndex).coerceAtLeast(0)
 
@@ -159,7 +176,10 @@ internal fun LiquidGlassTabView(
                 tabs = tabs,
                 selectedIndex = selectedPosition,
                 onTabSelected = { position -> onTabSelected(tabIndices[position]) },
-                modifier = Modifier.width(barWidth)
+                modifier = Modifier.width(barWidth),
+                accentColor = accentColor,
+                backgroundColor = backgroundColor,
+                contentColor = contentColor
             )
         }
     }
@@ -181,12 +201,18 @@ internal fun LiquidGlassTabView(
  *
  * @param backdrop The recorded content behind the bar, typically from `rememberLayerBackdrop` applied to the
  *   screen content with `layerBackdrop`.
- * @param tabs The tabs to show. Only [GlassTab.icon] and [GlassTab.title] are used.
+ * @param tabs The tabs to show. Only [GlassTab.icon], [GlassTab.title], and [GlassTab.isEnabled] are used.
  * @param selectedIndex The selected tab. Changes to this value move the pill.
- * @param onTabSelected Called with the new index when the selection changes by tap or drag.
+ * @param onTabSelected Called with the index the user picked, by tap or by drag. A tap reports the tab even when it is
+ *   already selected, so a re-tap reaches the app, as with the Material `NavigationBar`.
  * @param modifier The modifier to apply to the bar, usually a width.
  * @param style The tier's glass settings. Defaults to [LiquidGlassStyle.current]. Without [LiquidGlassStyle.accentLayer],
  *   layer 2 is skipped: layer 1 tints the tab under the pill with the accent color and feeds the pill's backdrop instead.
+ * @param accentColor The selected tab color. `Color.Unspecified` falls back to the default blue, for callers
+ *   outside `TabView`, which always passes the tint or the app accent color.
+ * @param backgroundColor A color drawn over the glass frost, leaving the bar clear when it is `Color.Unspecified` or
+ *   fully transparent. An opaque color makes the bar opaque, as it does for the Material bar.
+ * @param contentColor The unselected icon and label color. `Color.Unspecified` uses black or white for the theme.
  */
 @Composable
 internal fun LiquidGlassTabBar(
@@ -195,23 +221,36 @@ internal fun LiquidGlassTabBar(
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    style: LiquidGlassStyle = LiquidGlassStyle.current
+    style: LiquidGlassStyle = LiquidGlassStyle.current,
+    accentColor: Color = Color.Unspecified,
+    backgroundColor: Color = Color.Unspecified,
+    contentColor: Color = Color.Unspecified
 ) {
     if (tabs.isEmpty()) return
 
     val isLightTheme = !isSystemInDarkTheme()
 
-    // TODO: Take accentColor and containerColor from the environment tint and theme once finalized
-    val accentColor = if (isLightTheme) Color(0xFF0088FF) else Color(0xFF0091FF)
-    val containerColor = liquidGlassFrostColor(isLightTheme)
+    val resolvedAccentColor = if (accentColor.isSpecified) accentColor else if (isLightTheme) Color(0xFF0088FF) else Color(0xFF0091FF)
+    val frostColor = liquidGlassFrostColor(isLightTheme)
+    // An app background color is drawn over the frost; the default one is fully transparent and leaves the glass clear
+    val hasBackgroundColor = backgroundColor.isSpecified && backgroundColor.alpha > 0f
+    val drawBarSurface: DrawScope.() -> Unit = {
+        drawRect(frostColor)
+        if (hasBackgroundColor) {
+            drawRect(backgroundColor)
+        }
+    }
 
-    val baseContentColor = if (isLightTheme) Color.Black else Color.White
+    val baseContentColor = if (contentColor.isSpecified && contentColor.alpha > 0f) contentColor else if (isLightTheme) Color.Black else Color.White
     val isCompactLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val iconSize = if (isCompactLandscape) 22.dp else 30.dp
-    val iconScale = iconSize / 24.dp
+    // SkipUI draws a tab icon at 1.5x the current font size, so a larger text style grows the icon itself. Scaling the
+    // whole icon instead would scale its badge with it, and blur the glyph
+    val iconTextStyle = LocalTextStyle.current.copy(fontSize = (iconSize.value / 1.5f).sp)
     val labelTextStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal)
     val labelTextStyleBold = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     val minimumTouchTarget = 44.dp
+    val disabledContentAlpha = 0.38f // Material's disabled content alpha, applied over the bar's already-faded tabs
 
     val tabsBackdrop = rememberLayerBackdrop()
     val animationScope = rememberCoroutineScope()
@@ -243,6 +282,28 @@ internal fun LiquidGlassTabBar(
         // selectedIndex changes alike, so the pill animation has one source of truth
         var currentIndex by remember { mutableIntStateOf(selectedIndex) }
 
+        // The drag animation below is remembered across recompositions, so it reads the callback and the tabs through
+        // these holders rather than capturing the first composition's values
+        val latestOnTabSelected = rememberUpdatedState(onTabSelected)
+        val latestTabs = rememberUpdatedState(tabs)
+
+        // A disabled tab can't take the selection, so a drag released over one snaps to the closest tab that can
+        fun nearestEnabledIndex(index: Int): Int {
+            val currentTabs = latestTabs.value
+            if (currentTabs.getOrNull(index)?.isEnabled != false) {
+                return index
+            }
+            for (distance in 1 until currentTabs.size) {
+                if (currentTabs.getOrNull(index - distance)?.isEnabled == true) {
+                    return index - distance
+                }
+                if (currentTabs.getOrNull(index + distance)?.isEnabled == true) {
+                    return index + distance
+                }
+            }
+            return index
+        }
+
         // Drives the pill position as a fractional tab index.
         // pressProgress / scaleX / scaleY animate on press for the squish effect
         val anim = remember {
@@ -255,9 +316,12 @@ internal fun LiquidGlassTabBar(
                 pressedScale = 1.4f,
                 onDragStarted = { _ -> },
                 onDragStopped = {
-                    val targetIndex = targetValue.roundToInt().coerceIn(0, tabs.size - 1)
+                    val targetIndex = nearestEnabledIndex(targetValue.roundToInt().coerceIn(0, tabs.size - 1))
                     currentIndex = targetIndex
                     animateToValue(targetIndex.toFloat())
+                    // The pill covers the selected tab and takes its touches, so this also reports a tap on the
+                    // selected tab, which is how a re-tap reaches the app
+                    latestOnTabSelected.value(targetIndex)
                     animationScope.launch {
                         offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
                     }
@@ -279,13 +343,13 @@ internal fun LiquidGlassTabBar(
         LaunchedEffect(selectedIndex) {
             if (selectedIndex != currentIndex) currentIndex = selectedIndex
         }
-        // Any currentIndex change (tap or drag-stop) animates the pill and notifies the caller
+        // Any currentIndex change (tap, drag-stop, or external selection) animates the pill. The tap and drag-stop
+        // handlers report the selection themselves, so a re-tap of the selected tab still reaches the caller
         LaunchedEffect(anim) {
             snapshotFlow { currentIndex }
                 .drop(1)
                 .collectLatest { index ->
                     anim.animateToValue(index.toFloat())
-                    onTabSelected(index)
                 }
         }
 
@@ -326,7 +390,7 @@ internal fun LiquidGlassTabBar(
                         scaleX = scale
                         scaleY = scale
                     },
-                    onDrawSurface = { drawRect(containerColor) }
+                    onDrawSurface = drawBarSurface
                 )
                 .then(interactiveHighlight.modifier)
                 .fillMaxWidth()
@@ -352,27 +416,34 @@ internal fun LiquidGlassTabBar(
                         .weight(1f)
                         .fillMaxHeight()
                         .sizeIn(minWidth = minimumTouchTarget, minHeight = minimumTouchTarget)
+                        // Fade the whole tab rather than only its content color, so an icon that draws its own colors dims too
+                        .alpha(if (tab.isEnabled) 1f else disabledContentAlpha)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = null
+                            indication = null,
+                            enabled = tab.isEnabled
                         ) {
                             currentIndex = index
+                            // Report every tap, including one on the selected tab, as the Material bar does
+                            latestOnTabSelected.value(index)
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    val contentColor = if (style.accentLayer) baseContentColor.copy(alpha = iconAlpha)
-                        else lerp(baseContentColor.copy(alpha = 0.5f), accentColor, proximity)
+                    val tabContentColor = if (style.accentLayer) baseContentColor.copy(alpha = iconAlpha)
+                        else lerp(baseContentColor.copy(alpha = 0.5f), resolvedAccentColor, proximity)
+                    // Without the accent layer, this layer also draws the selected tab, so it takes the bolder label
+                    val tabLabelTextStyle = if (!style.accentLayer && isSelected) labelTextStyleBold else labelTextStyle
                     CompositionLocalProvider(
-                        LocalContentColor provides contentColor
+                        LocalContentColor provides tabContentColor
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Box(modifier = Modifier.size(iconSize), contentAlignment = Alignment.Center) {
-                                Box(modifier = Modifier.graphicsLayer(scaleX = iconScale, scaleY = iconScale)) { tab.icon() }
+                                ProvideTextStyle(iconTextStyle) { tab.icon() }
                             }
-                            ProvideTextStyle(labelTextStyle) {
+                            ProvideTextStyle(tabLabelTextStyle) {
                                 Box(
                                     modifier = Modifier
                                         .wrapContentHeight()
@@ -412,7 +483,7 @@ internal fun LiquidGlassTabBar(
                     highlight = {
                         Highlight.Default.copy(alpha = anim.pressProgress)
                     },
-                    onDrawSurface = { drawRect(containerColor) }
+                    onDrawSurface = drawBarSurface
                 )
                 .then(interactiveHighlight.modifier)
                 .fillMaxWidth()
@@ -426,16 +497,17 @@ internal fun LiquidGlassTabBar(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .sizeIn(minWidth = minimumTouchTarget, minHeight = minimumTouchTarget),
+                        .sizeIn(minWidth = minimumTouchTarget, minHeight = minimumTouchTarget)
+                        .alpha(if (tab.isEnabled) 1f else disabledContentAlpha),
                     contentAlignment = Alignment.Center
                 ) {
-                    CompositionLocalProvider(LocalContentColor provides accentColor) {
+                    CompositionLocalProvider(LocalContentColor provides resolvedAccentColor) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Box(modifier = Modifier.size(iconSize), contentAlignment = Alignment.Center) {
-                                Box(modifier = Modifier.graphicsLayer(scaleX = iconScale, scaleY = iconScale)) { tab.icon() }
+                                ProvideTextStyle(iconTextStyle) { tab.icon() }
                             }
                             ProvideTextStyle(labelTextStyleBold) {
                                 Box(
@@ -477,7 +549,8 @@ internal fun LiquidGlassTabBar(
                         )
                     },
                     highlight = {
-                        Highlight.Default.copy(alpha = anim.pressProgress)
+                        // A faint rim at rest gives the pill a defined capsule edge, as on iOS, and it brightens on press
+                        Highlight.Default.copy(alpha = 0.4f + 0.6f * anim.pressProgress)
                     },
                     shadow = {
                         Shadow(alpha = anim.pressProgress)
@@ -498,11 +571,12 @@ internal fun LiquidGlassTabBar(
                         scaleY *= 1f - (velocity * 0.25f).coerceIn(-0.2f, 0.2f)
                     },
                     onDrawSurface = {
-                        // Resting: subtle fill so the pill is visible. Pressed: nearly clear so the lens shows through
+                        // Resting: a light fill, so the pill reads as a bright capsule over the content rather than a
+                        // shadow. Pressed: nearly clear so the lens shows through
                         val progress = anim.pressProgress
                         drawRect(
-                            if (isLightTheme) Color.Black.copy(alpha = 0.1f)
-                            else Color.White.copy(alpha = 0.1f),
+                            if (isLightTheme) Color.White.copy(alpha = 0.24f)
+                            else Color.White.copy(alpha = 0.16f),
                             alpha = 1f - progress
                         )
                         drawRect(Color.Black.copy(alpha = 0.03f * progress))
