@@ -437,7 +437,7 @@ public struct NavigationStack : View, Renderable {
                         )
                         let topBarTitle: @Composable () -> Void = {
                             if let titleMenu {
-                                let menuModifier = Modifier.clickable(interactionSource: interactionSource, indication: nil, onClick: {
+                                let menuModifier = Modifier.padding(start = 8.dp).clickable(interactionSource: interactionSource, indication: nil, onClick: {
                                     titleMenu.toggleMenu()
                                 })
                                 let arrangement = Arrangement.spacedBy(2.dp, alignment: androidx.compose.ui.Alignment.CenterHorizontally)
@@ -447,7 +447,7 @@ public struct NavigationStack : View, Renderable {
                                 }
                                 titleMenu.Render(context: context)
                             } else {
-                                androidx.compose.material3.Text(title.localizedTextString(), maxLines: 1, overflow: TextOverflow.Ellipsis)
+                                androidx.compose.material3.Text(title.localizedTextString(), modifier: Modifier.padding(start = 8.dp), maxLines: 1, overflow: TextOverflow.Ellipsis) // Liquid Glass: leading padding on the title, see Navigation+LiquidGlass.swift
                             }
                         }
                         let topBarNavigationIcon: @Composable () -> Void = {
@@ -471,18 +471,12 @@ public struct NavigationStack : View, Renderable {
                                             LiquidGlassNavigationBackButton(isProminent: false, colors: navigationIconButtonColors, onClick: { navigator.value.navigateBack() }) { backIcon() } // Liquid Glass: see Navigation+LiquidGlass.swift
                                         }
                                     }
-                                    for renderable in topLeadingItems {
-                                        renderable.Render(context: toolbarItemContext)
-                                    }
                                     LiquidGlassTopToolbarItems(items: topLeadingItems, context: toolbarItemContext) // Liquid Glass: items on glass capsules, see Navigation+LiquidGlass.swift
                                 }
                             }
                         }
                         let topBarActions: @Composable () -> Void = {
                             let toolbarItemContext = context.content(modifier: Modifier.padding(start: 12.dp, end: 12.dp))
-                            for renderable in topTrailingItems {
-                                renderable.Render(context: toolbarItemContext)
-                            }
                             LiquidGlassTopToolbarItems(items: topTrailingItems, context: toolbarItemContext) // Liquid Glass: items on glass capsules, see Navigation+LiquidGlass.swift
                         }
                         var options = Material3TopAppBarOptions(title: topBarTitle, modifier: topBarModifier, navigationIcon: topBarNavigationIcon, colors: topBarColors, scrollBehavior: scrollBehavior)
@@ -518,6 +512,7 @@ public struct NavigationStack : View, Renderable {
 
         let bottomBarTopPx = remember { mutableStateOf(Float(0.0)) }
         let bottomBarHeightPx = remember { mutableStateOf(Float(0.0)) }
+        let navGlassBackdrop = rememberLiquidGlassNavBackdrop() // Liquid Glass: content a floating glass toolbar refracts, see Navigation+LiquidGlass.swift
         let bottomBar: @Composable () -> Void = {
             guard bottomBarPreferences?.visibility != Visibility.hidden else {
                 SideEffect {
@@ -596,6 +591,7 @@ public struct NavigationStack : View, Renderable {
                         }
                         if isLiquidGlassBottomBarFloating() { // Liquid Glass: glass capsules floating over the content, see Navigation+LiquidGlass.swift
                             LiquidGlassBottomToolbar(items: bottomItems, backdrop: navGlassBackdrop, modifier: options.modifier, context: context)
+                        } else {
                         BottomAppBar(modifier: options.modifier, containerColor: options.containerColor, contentColor: options.contentColor, tonalElevation: options.tonalElevation, contentPadding: options.contentPadding, windowInsets: windowInsets) {
                             // Use an HStack so that it sets up the environment for bottom toolbar Spacers
                             HStack(spacing: 24.0) {
@@ -605,6 +601,7 @@ public struct NavigationStack : View, Renderable {
                                     }
                                 }
                             }.Compose(context)
+                        }
                         }
                     }
                 }
@@ -767,7 +764,6 @@ public struct NavigationStack : View, Renderable {
                     ) {}
                 }
 
-                contentModifier = contentModifier.padding(top: topPadding, bottom: bottomPadding)
                 contentModifier = contentModifier.padding(top: topPadding, bottom: bottomPadding).then(liquidGlassNavContentModifier(navGlassBackdrop)) // Liquid Glass: record what the floating toolbar refracts
                 Box(modifier: contentModifier, contentAlignment: androidx.compose.ui.Alignment.Center) {
                     var topPadding = 0.dp
