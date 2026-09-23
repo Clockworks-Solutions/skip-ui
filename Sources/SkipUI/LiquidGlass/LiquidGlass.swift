@@ -29,6 +29,13 @@ public enum LiquidGlass : Int, Hashable, Sendable {
 
     /// Never render Liquid Glass; use native Material rendering. Droid Dex is not started for this.
     case disabled = 1 // For bridging
+
+    /// Full glass on every device, whatever its class. Droid Dex is not started for this.
+    case forced = 2 // For bridging
+
+    /// Glass on every device, full on the top two device classes and without lens effects on the rest, including a
+    /// device whose class cannot be measured.
+    case forcedOptimized = 3 // For bridging
 }
 
 #if SKIP
@@ -50,14 +57,22 @@ public extension EnvironmentValues {
 extension EnvironmentValues {
     /// The tier to render glass with at this position in the view tree.
     ///
-    /// ``LiquidGlass/disabled`` is always `NATIVE`. ``LiquidGlass/adaptive`` starts device detection on first use and
-    /// returns the detected tier, which is `NATIVE` until detection completes.
+    /// Device detection starts on first use and only for the modes that need it; ``LiquidGlass/disabled`` and
+    /// ``LiquidGlass/forced`` answer without measuring.
     @Composable func liquidGlassTier() -> LiquidGlassTier {
-        guard liquidGlass == LiquidGlass.adaptive else {
+        let context = LocalContext.current
+        switch liquidGlass {
+        case .disabled:
             return LiquidGlassTier.NATIVE
+        case .forced:
+            return LiquidGlassTier.FULL
+        case .forcedOptimized:
+            LiquidGlassCapability.resolve(context)
+            return LiquidGlassCapability.optimizedTier
+        default:
+            LiquidGlassCapability.resolve(context)
+            return LiquidGlassCapability.tier
         }
-        LiquidGlassCapability.resolve(LocalContext.current)
-        return LiquidGlassCapability.tier
     }
 }
 #endif

@@ -6,6 +6,7 @@ package skip.ui.liquidglass
 
 import android.content.Context
 import android.os.SystemClock
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
+import skip.ui.EnvironmentValues
 
 import com.blinkit.droiddex.DroidDex
 import com.blinkit.droiddex.constants.PerformanceClass
@@ -57,9 +60,16 @@ internal enum class LiquidGlassTier {
             PerformanceLevel.AVERAGE -> REDUCED
             PerformanceLevel.LOW, PerformanceLevel.UNKNOWN -> NATIVE
         }
+        /**
+		 * The tier when glass is forced but kept affordable: the top two device classes get [FULL], every other class —
+		 * including an unmeasured one — gets [REDUCED] rather than dropping to Material.
+		 */
+		internal fun optimized(level: PerformanceLevel): LiquidGlassTier = when (level) {
+			PerformanceLevel.EXCELLENT, PerformanceLevel.HIGH -> FULL
+			else -> REDUCED
+		}
     }
 }
-
 /**
  * The glass effect settings that differ between tiers. Glass components read these instead of fixed values.
  *
@@ -85,29 +95,37 @@ internal data class LiquidGlassStyle(
          *
          * Reads Compose state, so a component reading it during composition recomposes when the tier resolves.
          */
-        val current: LiquidGlassStyle
-            get() = LiquidGlassCapability.tier.style ?: Full
+		val current: LiquidGlassStyle
+		@Composable get() = EnvironmentValues.shared.liquidGlassTier().style ?: Full
     }
 }
 
 /**
- * Resolves the device's [LiquidGlassTier] once per process from Droid Dex CPU and memory levels.
+ * Resolves the device class once per process from Droid Dex CPU and memory levels, which [tier] and
+ * [optimizedTier] map to a rendering tier.
  *
- * [tier] starts as [LiquidGlassTier.NATIVE], the tier for an unknown level. Droid Dex measures on a background thread, and
- * as soon as both CPU and memory have a level, their average decides the tier and observation stops, so the tier changes
- * at most once per session. A device that cannot measure one of them keeps [LiquidGlassTier.NATIVE]. Nothing is saved;
- * the tier is kept in memory only.
+ * [performanceLevel] starts `UNKNOWN`. Droid Dex measures on a background thread, and once both CPU and memory have a
+ * level their average is stored and observation stops, so it changes at most once per session. A device that cannot
+ * measure one of them stays `UNKNOWN`. Nothing is saved; the level is kept in memory only.
  *
- * [tier] is Compose state, so composables that read it recompose when it resolves.
+ * [performanceLevel] is Compose state, so composables reading a tier derived from it recompose when it lands.
  */
 internal object LiquidGlassCapability {
-    /** The tier to render with. [LiquidGlassTier.NATIVE] until resolved. */
-    var tier: LiquidGlassTier by mutableStateOf(LiquidGlassTier.NATIVE)
+    /** The measured device class. `UNKNOWN` until Droid Dex reports. */
+    var performanceLevel: PerformanceLevel by mutableStateOf(PerformanceLevel.UNKNOWN)
         private set
 
-    /** The Droid Dex level that decided [tier], for diagnostics. `null` until resolved. */
-    var performanceLevelName: String? by mutableStateOf(null)
-        private set
+    /** The tier for `LiquidGlass.adaptive`: glass only where the device can afford it. */
+    val tier: LiquidGlassTier
+        get() = LiquidGlassTier.from(performanceLevel)
+
+    /** The tier for `LiquidGlass.forcedOptimized`: glass everywhere, full on the top two device classes. */
+    val optimizedTier: LiquidGlassTier
+        get() = LiquidGlassTier.optimized(performanceLevel)
+
+    /** The Droid Dex level name, for diagnostics. `null` until resolved. */
+    val performanceLevelName: String?
+        get() = if (performanceLevel == PerformanceLevel.UNKNOWN) null else performanceLevel.name
 
     /** Milliseconds from [resolve] to the resolved [tier], for diagnostics. `null` until resolved. */
     var resolveDurationMs: Long? by mutableStateOf(null)
@@ -138,10 +156,8 @@ internal object LiquidGlassCapability {
             ) { cpu, memory -> cpu != PerformanceLevel.UNKNOWN && memory != PerformanceLevel.UNKNOWN }
                 .first { isMeasured -> isMeasured }
 
-            val level = DroidDex.getPerformanceLevel(PerformanceClass.CPU, PerformanceClass.MEMORY)
-            performanceLevelName = level.name
             resolveDurationMs = SystemClock.elapsedRealtime() - startTime
-            tier = LiquidGlassTier.from(level)
+            performanceLevel = DroidDex.getPerformanceLevel(PerformanceClass.CPU, PerformanceClass.MEMORY)
         }
     }
 
