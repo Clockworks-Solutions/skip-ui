@@ -122,7 +122,7 @@ public struct ScrollView : View, Renderable {
                         finalScrollModifier = scrollModifier
                     }
 
-                    Column(modifier: finalScrollModifier) {
+                    Column(modifier: finalScrollModifier.padding(bottom: liquidGlassScrollContentInset())) { // Liquid Glass: the end of the content can be scrolled clear of the floating glass chrome, see TabView+LiquidGlass.swift
                         if wantsVerticalScroll {
                             let searchableState = EnvironmentValues.shared._searchableState
                             let isSearchable = searchableState?.isOnNavigationStack == false

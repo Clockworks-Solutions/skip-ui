@@ -182,7 +182,7 @@ public final class List : View, Renderable {
                 Box(modifier: containerModifier) {
                     let density = LocalDensity.current
                     let headerSafeAreaHeight = with(density) { safeAreaExpansion.top.toDp() }
-                    let footerSafeAreaHeight = with(density) { safeAreaExpansion.bottom.toDp() }
+                    let footerSafeAreaHeight = with(density) { safeAreaExpansion.bottom.toDp() } + liquidGlassScrollContentInset() // Liquid Glass: the last row can be scrolled clear of the floating glass chrome, see TabView+LiquidGlass.swift
                     RenderList(context: itemContext, styling: styling, arguments: ListArguments(headerSafeAreaHeight: headerSafeAreaHeight, footerSafeAreaHeight: footerSafeAreaHeight, safeAreaEdges: safeAreaEdges))
                     if let refreshState {
                         PullRefreshIndicator(refreshing.value, refreshState, Modifier.align(androidx.compose.ui.Alignment.TopCenter))

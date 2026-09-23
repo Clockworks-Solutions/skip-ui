@@ -14,6 +14,9 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -26,9 +29,8 @@ import skip.ui.liquidglass.__
     return skip.ui.liquidglass.rememberLiquidGlassTabBarState()
 }
 
-/// A modifier for the tab content: it records the content into the glass tab bar backdrop, and watches it scroll so the
-/// bar can minimize when `tabBarMinimizeBehavior(_:)` asks it to. No modifier when the Liquid Glass tier is `NATIVE`
-/// and the Material bar is shown.
+/// Records the tab content into the bar's backdrop and watches it scroll, so the bar can minimize when
+/// `tabBarMinimizeBehavior(_:)` asks. Nothing on the `NATIVE` tier.
 @Composable func liquidGlassTabBarContentModifier(_ state: LiquidGlassTabBarState) -> Modifier {
     guard isLiquidGlassTabBarEnabled() else {
         return Modifier
@@ -37,9 +39,7 @@ import skip.ui.liquidglass.__
     return Modifier.layerBackdrop(state.backdrop).nestedScroll(minimizeConnection)
 }
 
-/// The glass tab bar's reaction to scrolling, from the `tabBarMinimizeBehavior(_:)` environment value.
-///
-/// `.automatic` never minimizes, as it does on iOS today, where minimizing is opt-in.
+/// How the bar reacts to scrolling. `.automatic` never minimizes, matching iOS, where minimizing is opt-in.
 @Composable func liquidGlassTabBarMinimizeBehavior() -> GlassTabBarMinimizeBehavior {
     let behavior = EnvironmentValues.shared.tabBarMinimizeBehavior
     if behavior == TabBarMinimizeBehavior.onScrollDown {
@@ -51,25 +51,87 @@ import skip.ui.liquidglass.__
     }
 }
 
+/// Render `TabView` content, publishing how far the bar reaches over it.
+///
+/// The glass bar takes no space in the layout, so content draws under it and refracts through it; anything that must
+/// not be covered reads `liquidGlassTabBarInset()` and moves up. The Material bar publishes its height too, since a
+/// nested `TabView` would otherwise land its bar on the outer one.
+@Composable func LiquidGlassTabContent(state: LiquidGlassTabBarState, materialBarHeightPx: Float, content: @Composable () -> Void) {
+    guard isLiquidGlassTabBarEnabled() else {
+        // The Material bar takes its own space, so nothing has to move for it — except a nested `TabView`'s bar, which
+        // Compose otherwise drops straight on top of this one. It publishes only the inset, and no content inset
+        let materialInset = with(LocalDensity.current) { max(Float(0.0), materialBarHeightPx).toDp() }
+        WithGlassTabBarInset(inset: materialInset, contentInset: 0.dp, content: content)
+        return
+    }
+    WithGlassTabBarInset(inset: state.inset, contentInset: state.contentInset, content: content)
+}
+
+/// How far an enclosing `TabView`'s glass bar reaches over this content, including the system navigation bar and any
+/// outer bar when nested. Zero outside a `TabView`, and zero for the Material bar, which takes its own space.
+@Composable func liquidGlassTabBarInset() -> Dp {
+    return LocalGlassTabBarInset.current
+}
+
+/// The space a scrollable adds after its content so the end clears the chrome floating over it.
+///
+/// Nothing moves: content still draws to the bottom of the screen and refracts through the glass, the scrollable is
+/// just that much longer — how an iOS list clears a floating tab bar.
+@Composable func liquidGlassScrollContentInset() -> Dp {
+    return LocalGlassContentInset.current
+}
+
+/// Render navigation content under a floating bottom toolbar, adding the toolbar's height to the scroll inset so
+/// nothing is stranded beneath it.
+///
+/// - Parameters:
+///   - barHeightPx: The measured height of the bottom toolbar, or 0 when there is none.
+@Composable func LiquidGlassBottomBarContent(barHeightPx: Float, content: @Composable () -> Void) {
+    guard isLiquidGlassBottomBarFloating(), barHeightPx > Float(0.0) else {
+        content()
+        return
+    }
+    let barHeight = with(LocalDensity.current) { barHeightPx.toDp() }
+    WithGlassContentInset(inset: LocalGlassContentInset.current + barHeight, content: content)
+}
+
+/// How far a floating bottom toolbar lifts to clear the tab bar below it.
+///
+/// Zero on the `NATIVE` tier, where the layout already places the Material toolbar above the Material tab bar and
+/// adding the published inset would apply it twice.
+@Composable func liquidGlassFloatingBottomBarInset() -> Dp {
+    guard isLiquidGlassBottomBarFloating() else {
+        return 0.dp
+    }
+    return liquidGlassTabBarInset()
+}
+
+/// Whether toolbars render as glass: floating capsules over the content, rather than a Material bar.
+///
+/// True wherever glass renders, with or without a `TabView`. Inside one the bottom toolbar sits above the tab bar, on
+/// its own it sits above the system navigation bar, and either way the content keeps running underneath it.
+@Composable func isLiquidGlassToolbarEnabled() -> Bool {
+    return EnvironmentValues.shared.liquidGlassTier() != LiquidGlassTier.NATIVE
+}
+
+/// - Seealso: `isLiquidGlassToolbarEnabled()`
+@Composable func isLiquidGlassBottomBarFloating() -> Bool {
+    return isLiquidGlassToolbarEnabled()
+}
+
 /// Whether the `TabView` bottom bar renders as the glass tab bar, rather than the Material `NavigationBar` for the
 /// `NATIVE` Liquid Glass tier.
 @Composable func isLiquidGlassTabBarEnabled() -> Bool {
     return EnvironmentValues.shared.liquidGlassTier() != LiquidGlassTier.NATIVE
 }
 
-/// Render the `TabView` bottom bar as a floating `LiquidGlassTabView` instead of the Material `NavigationBar`.
+/// Render the `TabView` bottom bar as a floating glass bar instead of the Material `NavigationBar`.
 ///
-/// Uses the same icons, titles, and selection handling as the Material bar, including any `material3NavigationBar(_:)`
-/// customization of `itemIcon`, `itemLabel`, `itemEnabled`, and `onItemClick`. Tabs that are `nil` (from a `false`
-/// conditional) or hidden are skipped, as in the Material bar.
+/// Icons, titles, selection, enablement and colors all come from the same `Material3NavigationBarOptions` the Material
+/// bar uses, so `material3NavigationBar(_:)` customization applies here too, and `nil` or hidden tabs are skipped.
 ///
-/// Colors follow the Material bar too: the selected tab takes the `tint` environment value, falling back to the app's
-/// accent color, a tab bar background set with `toolbarBackground(_:for: .tabBar)` is drawn over the glass frost, and
-/// unselected tabs take the bar's content color.
-///
-/// Unlike the Material bar, the glass bar does not raise a system background when content scrolls under it: glass is
-/// meant to show the content moving beneath, so only a background the app asks for is drawn. A gradient or other
-/// non-color background is ignored for now.
+/// Unlike the Material bar it raises no system background when content scrolls under it — glass is meant to show the
+/// content moving beneath — so only an app-specified background is drawn. Non-color backgrounds are ignored for now.
 ///
 /// - Parameters:
 ///   - state: The bar state shared with the `TabView`.

@@ -572,6 +572,7 @@ public struct NavigationStack : View, Renderable {
                     return ComposeResult.ok
                 } in: {
                     var bottomBarModifier = Modifier.zIndex(Float(1.1))
+                        .padding(bottom: liquidGlassFloatingBottomBarInset()) // Liquid Glass: sit above the floating glass tab bar rather than behind it; zero on the NATIVE tier, see TabView+LiquidGlass.swift
                         .onGloballyPositionedInWindow { bounds in
                             bottomBarTopPx.value = bounds.top
                             bottomBarHeightPx.value = bounds.bottom - bounds.top
@@ -655,7 +656,7 @@ public struct NavigationStack : View, Renderable {
                         // Elevate the top padding modifier so that content always has the same context, allowing it to avoid recomposition
                         Box(modifier: Modifier.padding(top: topPadding)) {
                             PreferenceValues.shared.collectPreferences([searchableStateCollector, scrollToTopCollector]) {
-                                content(context.content())
+                                LiquidGlassBottomBarContent(barHeightPx: bottomBarHeightPx.value) { content(context.content()) } // Liquid Glass: scrollables clear the floating toolbar, see TabView+LiquidGlass.swift
                             }
                         }
                     }
@@ -732,7 +733,9 @@ public struct NavigationStack : View, Renderable {
                 }
 
                 if bottomBarHeightPx.value > Float(0.0) {
-                    bottomPadding = with(density) { bottomBarHeightPx.value.toDp() }
+                    // Liquid Glass: a floating toolbar takes no strip of the layout, so content keeps running under it
+                    // and through the glass bar below, see TabView+LiquidGlass.swift
+                    bottomPadding = isLiquidGlassBottomBarFloating() ? 0.dp : with(density) { bottomBarHeightPx.value.toDp() }
                 } else if arguments.ignoresSafeAreaEdges.contains(.bottom) {
                     bottomPadding = max(0.dp, WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding())
                 } else {

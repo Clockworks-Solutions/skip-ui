@@ -27,8 +27,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,21 +57,28 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -95,12 +103,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
-/** The width of the glass tab bar once it is minimized: room for one tab icon. */
-internal val liquidGlassMinimizedTabBarWidth = 76.dp
-
-/** The height of the glass tab bar at full size, and minimized. */
-internal val liquidGlassTabBarHeight = 65.dp
-internal val liquidGlassMinimizedTabBarHeight = 50.dp
 
 /**
  * A single tab in a [LiquidGlassTabBar].
@@ -124,8 +126,11 @@ internal class GlassTab(
  *
  * The `TabView` owns the tab content, back stacks, and selection; this only renders the bar. It takes no height in the
  * tab view layout, so tab content extends to the bottom of the screen and scrolls beneath the glass. The bar draws
- * upward from the bottom edge, above the system navigation bar, and is sized to about 88dp per tab, capped to the
- * available width minus 24dp on each side.
+ * upward from the bottom edge and is sized to about 88dp per tab, capped to the available width minus 24dp on each side.
+ *
+ * It sits above whatever already occupies the bottom of the content it floats over: the system navigation bar, and the
+ * outer bar too when one `TabView` is nested in another. It reports its own footprint through
+ * [LiquidGlassTabBarState.inset], which is how a nested bar, and a bottom toolbar, know to stay above it.
  *
  * @param state The bar state shared with the `TabView`, holding the backdrop it refracts and its minimized state.
  * @param tabIndices The `TabView` indices of the visible tabs, in display order. Hidden and conditional tabs are omitted.
@@ -173,27 +178,61 @@ internal fun LiquidGlassTabView(
     Box(modifier = Modifier.fillMaxWidth().height(0.dp).zIndex(1f)) {
         // Measure available width, then size the bar to content (ideal 88dp per tab),
         // falling back to equal sharing when the screen is too narrow
+        val density = LocalDensity.current
+        // Stack on top of whatever is already at the bottom of this content: the system navigation bar at the top
+        // level, and the outer bar's whole footprint when one TabView is nested in another
+        val inheritedInset = LocalGlassTabBarInset.current
+        val systemBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val bottomInsetHeight = if (inheritedInset > 0.dp) inheritedInset else systemBottomInset
+        val bottomInset = Modifier.padding(bottom = bottomInsetHeight)
+        val barHeight = liquidGlassTabBarHeight * (1f - minimizeProgress) + liquidGlassMinimizedTabBarHeight * minimizeProgress
+
+        // Drawn first, so the bar sits on top of it
+        LiquidGlassTabBarEdgeEffect(
+            backdrop = state.backdrop,
+            height = bottomInsetHeight + 2.dp + barHeight + liquidGlassTabBarEdgeFade,
+            minimizeProgress = minimizeProgress,
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight(align = Alignment.Bottom, unbounded = true)
+        )
+
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight(align = Alignment.Bottom, unbounded = true)
-                .windowInsetsPadding(WindowInsets.navigationBars)
+                .then(bottomInset)
                 .padding(bottom = 2.dp),
             contentAlignment = Alignment.Center
         ) {
-            val density = LocalDensity.current
             val idealPx = with(density) { (88.dp * tabs.size).toPx() }
-            val maxPx = (constraints.maxWidth.toFloat() - with(density) { 48.dp.toPx() })
+            val maxPx = (constraints.maxWidth.toFloat() - with(density) { (liquidGlassTabBarSideMargin * 2f).toPx() })
                 .coerceAtLeast(0f)
             val fullBarWidth = with(density) { idealPx.coerceAtMost(maxPx).toDp() }
             // Minimized, the bar is just wide enough for the selected tab's icon
             val barWidth = fullBarWidth * (1f - minimizeProgress) + liquidGlassMinimizedTabBarWidth * minimizeProgress
+            // and it tucks into the leading edge rather than staying centered, so it slides out of the way of the
+            // content instead of sitting in the middle of it. The offset follows the same animation as the width
+            val containerWidth = with(density) { constraints.maxWidth.toDp() }
+            val centeredStart = (containerWidth - barWidth) / 2f
+            val barOffsetX = (liquidGlassTabBarSideMargin - centeredStart) * minimizeProgress
             LiquidGlassTabBar(
                 backdrop = state.backdrop,
                 tabs = tabs,
                 selectedIndex = selectedPosition,
                 onTabSelected = { position -> onTabSelected(tabIndices[position]) },
-                modifier = Modifier.width(barWidth),
+                modifier = Modifier
+                    .width(barWidth)
+                    .offset(x = barOffsetX)
+                    .onGloballyPositioned { coordinates ->
+                        // Only at full size: anything reading the inset — a nested bar, a bottom toolbar — would
+                        // otherwise move on every frame of the minimize animation, for a bar that soon comes back
+                        if (minimizeProgress == 0f) {
+                            state.inset = bottomInsetHeight + 2.dp + with(density) { coordinates.size.height.toDp() }
+                            // Scrollables already keep the system navigation bar clear through the safe area
+                            state.contentInset = (state.inset - systemBottomInset).coerceAtLeast(0.dp)
+                        }
+                    },
                 accentColor = accentColor,
                 backgroundColor = backgroundColor,
                 contentColor = contentColor,
@@ -202,6 +241,56 @@ internal fun LiquidGlassTabView(
             )
         }
     }
+}
+
+/**
+ * The soft edge the bar floats on: the content behind it blurs out toward the bottom of the screen.
+ *
+ * Content scrolls under the floating bar, which otherwise leaves it running sharply off the bottom edge and through
+ * the gaps beside the bar. iOS blurs the whole bottom strip instead, so the bar reads as sitting on the content rather
+ * than being cut out of it. A blurred copy of the same backdrop the bar refracts is drawn over that strip, masked by a
+ * vertical gradient, so the blur fades in from nothing at the top to full at the bottom edge.
+ *
+ * Drawn before the bar, which then refracts the unblurred backdrop over the top of it.
+ *
+ * Fades out as the bar minimizes: a strip across the whole width has nothing to soften once the bar has shrunk to a
+ * pill in the corner, and the content is meant to be read while it scrolls.
+ *
+ * @param backdrop The recorded tab content, the same one the bar refracts.
+ * @param height How far up from the bottom of the screen the strip reaches.
+ * @param minimizeProgress 0 with the bar at full size, 1 once it is minimized and the strip is gone.
+ * @param modifier The modifier to apply, which places the strip against the bottom of the tab bar slot.
+ */
+@Composable
+private fun LiquidGlassTabBarEdgeEffect(backdrop: Backdrop, height: Dp, minimizeProgress: Float, modifier: Modifier = Modifier) {
+    if (minimizeProgress >= 1f) {
+        return
+    }
+    Box(
+        modifier = modifier
+            .height(height)
+            .alpha(1f - minimizeProgress)
+            // The gradient mask has to cut into the blurred copy rather than the screen, so it needs its own layer
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        // Holds off until well down the strip, and never fully replaces the sharp content, so rows
+                        // beside the bar stay readable
+                        0f to Color.Transparent,
+                        0.6f to Color.Black.copy(alpha = 0.25f),
+                        1f to Color.Black.copy(alpha = 0.85f)
+                    ),
+                    blendMode = BlendMode.DstIn
+                )
+            }
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RectangleShape },
+                effects = { blur(4f.dp.toPx()) }
+            )
+    )
 }
 
 /**
@@ -470,8 +559,14 @@ internal fun LiquidGlassTabBar(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    val tabContentColor = if (style.accentLayer) baseContentColor.copy(alpha = iconAlpha)
-                        else lerp(baseContentColor.copy(alpha = 0.5f), resolvedAccentColor, proximity)
+                    // With the accent layer, the selected tab's icon lives in layer 2 and is revealed by the pill, so
+                    // this layer draws it transparent. Minimized there is no pill, so it fades in here instead
+                    val tabContentColor = if (style.accentLayer) {
+                        if (isSelected) lerp(baseContentColor.copy(alpha = iconAlpha), resolvedAccentColor, minimizeProgress)
+                        else baseContentColor.copy(alpha = iconAlpha)
+                    } else {
+                        lerp(baseContentColor.copy(alpha = 0.5f), resolvedAccentColor, proximity)
+                    }
                     // Without the accent layer, this layer also draws the selected tab, so it takes the bolder label
                     val tabLabelTextStyle = if (!style.accentLayer && isSelected) labelTextStyleBold else labelTextStyle
                     CompositionLocalProvider(

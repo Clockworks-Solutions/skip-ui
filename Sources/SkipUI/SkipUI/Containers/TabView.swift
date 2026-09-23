@@ -425,7 +425,7 @@ public struct TabView : View, Renderable {
                                         }
 										LiquidGlassTabViewBar(state: glassTabBarState, tabs: tabs, selectedTabIndex: selectedTabIndex.value, options: options, tabBarPreferences: reducedTabBarPreferences)
                                     } else if layoutType == NavigationSuiteType.NavigationBar {
-                                        NavigationBar(modifier: options.modifier.semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar"), containerColor: options.containerColor, contentColor: options.contentColor, tonalElevation: options.tonalElevation) {
+                                        NavigationBar(modifier: options.modifier.padding(bottom: liquidGlassTabBarInset()).semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar"), containerColor: options.containerColor, contentColor: options.contentColor, tonalElevation: options.tonalElevation) { // Liquid Glass: a nested tab bar clears the one outside it, see TabView+LiquidGlass.swift
                                             for tabIndex in 0..<tabRenderables.size {
                                                 // A tab from a `false` conditional branch (e.g. `if x { Tab(...) }`)
                                                 // maps to a nil entry above; skip it so it does not render a blank,
@@ -500,7 +500,7 @@ public struct TabView : View, Renderable {
                                     // Inset manually where our container ignored the safe area, but we aren't showing a bar
                                     let topPadding = ignoresSafeAreaEdges.contains(.top) ? WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() : 0.dp
                                     var bottomPadding = 0.dp
-                                    if bottomBarTopPx.value <= Float(0.0) && ignoresSafeAreaEdges.contains(.bottom) {
+                                    if bottomBarTopPx.value <= Float(0.0) {
                                         bottomPadding = max(0.dp, WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding())
                                     }
                                     let contentModifier = Modifier.fillMaxSize().padding(top: topPadding, bottom: bottomPadding)
@@ -521,7 +521,7 @@ public struct TabView : View, Renderable {
                                         // recomposing when called with the same values
                                         let arguments = TabEntryArguments(tabIndex: tabIndex, modifier: contentModifier, safeArea: contentSafeArea)
                                         PreferenceValues.shared.collectPreferences([tabBarPreferencesCollector]) {
-                                            RenderEntry(with: arguments, context: entryContext)
+                                            LiquidGlassTabContent(state: glassTabBarState, materialBarHeightPx: bottomBarHeightPx.value) { RenderEntry(with: arguments, context: entryContext) } // Liquid Glass: content and any bar inside it know how far the bar below reaches, see TabView+LiquidGlass.swift
                                         }
                                     }
                                 })
