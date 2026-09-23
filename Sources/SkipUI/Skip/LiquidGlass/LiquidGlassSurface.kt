@@ -5,18 +5,28 @@
 package skip.ui.liquidglass
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -96,4 +106,53 @@ internal fun Modifier.liquidGlassSurface(
             }
         )
         .then(interactionModifier)
+}
+
+/**
+ * Whether the content is already on a toolbar capsule, in which case a non-prominent glass button draws its label
+ * alone rather than nesting a second capsule inside the first. A prominent item is split out before this is reached.
+ */
+internal val LocalGlassToolbarCapsule = compositionLocalOf { false }
+
+/** Whether a glass button should skip its own surface because a toolbar capsule is already drawing one. */
+@Composable
+fun isOnLiquidGlassToolbarCapsule(): Boolean = LocalGlassToolbarCapsule.current
+
+/** Provides [LocalGlassBackdrop], so glass drawn inside samples the given recording rather than its own content. */
+@Composable
+internal fun WithGlassBackdrop(backdrop: Backdrop?, content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
+        content()
+    }
+}
+
+/**
+ * Holds an item that brings its own surface to the bar's height, since nothing else ties its size to the capsules
+ * beside it. Oversized labels clip, as they would on a capsule; the minimum width keeps an icon-only item round.
+ */
+internal fun Modifier.liquidGlassToolbarItemSize(height: Dp): Modifier = this.height(height).widthIn(min = height)
+
+/**
+ * One capsule of a floating toolbar. Never narrower than it is tall and centers what it holds, so a capsule with a
+ * single icon comes out round.
+ */
+@Composable
+internal fun LiquidGlassToolbarGroup(
+    height: Dp = liquidGlassToolbarHeight,
+    contentPadding: Dp = liquidGlassToolbarContentPadding,
+    content: @Composable () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .height(height)
+            .widthIn(min = height)
+            .liquidGlassSurface()
+            .padding(horizontal = contentPadding),
+        horizontalArrangement = Arrangement.spacedBy(liquidGlassToolbarItemSpacing, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CompositionLocalProvider(LocalGlassToolbarCapsule provides true) {
+            content()
+        }
+    }
 }

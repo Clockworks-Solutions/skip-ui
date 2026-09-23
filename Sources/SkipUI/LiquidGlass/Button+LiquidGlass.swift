@@ -100,6 +100,23 @@ extension Button {
         }
         let contentContext = context.content()
 
+        // Already on a toolbar capsule: draw the label alone, the way iOS 26 merges a plain glass item into the
+        // capsule its group shares rather than nesting a second one inside it
+        if !isProminent, isOnLiquidGlassToolbarCapsule() {
+            // Swap in the plain style before rendering: leaving the glass style in the environment would route straight
+            // back into this function
+            let plainStyle: Any = PlainButtonStyle()
+            let plainStackedStyle = StackedButtonStyle(style: plainStyle, parent: EnvironmentValues.shared._buttonStyle?.parent, source: ButtonStyleModifier(style: plainStyle))
+            EnvironmentValues.shared.setValues {
+                $0.set_buttonStyle(plainStackedStyle)
+                $0.set_foregroundStyle(foregroundStyle)
+                return ComposeResult.ok
+            } in: {
+                RenderButton(label: label, context: context, role: role, isEnabled: isEnabled, action: action ?? {})
+            }
+            return
+        }
+
         EnvironmentValues.shared.setValues {
             $0.set_foregroundStyle(foregroundStyle)
             return ComposeResult.ok
@@ -158,7 +175,7 @@ public struct Material3GlassButtonOptions {
     /// An overlay color drawn on the glass. When unspecified and there is no tint, a light or dark frost is used.
     public var surfaceColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified
     /// Padding between the glass edge and the label.
-    public var contentPadding: PaddingValues = PaddingValues(horizontal: 8.dp, vertical: 8.dp)
+    public var contentPadding: PaddingValues = PaddingValues(horizontal: liquidGlassButtonContentInset, vertical: 8.dp)
     /// An optional source for observing press state.
     public var interactionSource: MutableInteractionSource? = nil
 

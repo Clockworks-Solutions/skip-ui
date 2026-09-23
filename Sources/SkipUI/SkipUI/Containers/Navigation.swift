@@ -474,6 +474,7 @@ public struct NavigationStack : View, Renderable {
                                     for renderable in topLeadingItems {
                                         renderable.Render(context: toolbarItemContext)
                                     }
+                                    LiquidGlassTopToolbarItems(items: topLeadingItems, context: toolbarItemContext) // Liquid Glass: items on glass capsules, see Navigation+LiquidGlass.swift
                                 }
                             }
                         }
@@ -482,6 +483,7 @@ public struct NavigationStack : View, Renderable {
                             for renderable in topTrailingItems {
                                 renderable.Render(context: toolbarItemContext)
                             }
+                            LiquidGlassTopToolbarItems(items: topTrailingItems, context: toolbarItemContext) // Liquid Glass: items on glass capsules, see Navigation+LiquidGlass.swift
                         }
                         var options = Material3TopAppBarOptions(title: topBarTitle, modifier: topBarModifier, navigationIcon: topBarNavigationIcon, colors: topBarColors, scrollBehavior: scrollBehavior)
                         if let updateOptions = EnvironmentValues.shared._material3TopAppBar {
@@ -592,6 +594,8 @@ public struct NavigationStack : View, Renderable {
                         if let updateOptions = EnvironmentValues.shared._material3BottomAppBar {
                             options = updateOptions(options)
                         }
+                        if isLiquidGlassBottomBarFloating() { // Liquid Glass: glass capsules floating over the content, see Navigation+LiquidGlass.swift
+                            LiquidGlassBottomToolbar(items: bottomItems, backdrop: navGlassBackdrop, modifier: options.modifier, context: context)
                         BottomAppBar(modifier: options.modifier, containerColor: options.containerColor, contentColor: options.contentColor, tonalElevation: options.tonalElevation, contentPadding: options.contentPadding, windowInsets: windowInsets) {
                             // Use an HStack so that it sets up the environment for bottom toolbar Spacers
                             HStack(spacing: 24.0) {
@@ -764,6 +768,7 @@ public struct NavigationStack : View, Renderable {
                 }
 
                 contentModifier = contentModifier.padding(top: topPadding, bottom: bottomPadding)
+                contentModifier = contentModifier.padding(top: topPadding, bottom: bottomPadding).then(liquidGlassNavContentModifier(navGlassBackdrop)) // Liquid Glass: record what the floating toolbar refracts
                 Box(modifier: contentModifier, contentAlignment: androidx.compose.ui.Alignment.Center) {
                     var topPadding = 0.dp
                     let searchableState: SearchableState? = arguments.isRoot ? (EnvironmentValues.shared._searchableState ?? searchableStatePreference.value.reduced) : nil
