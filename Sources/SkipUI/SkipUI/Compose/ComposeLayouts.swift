@@ -108,13 +108,14 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
 }
 
 @Composable func TargetViewLayout(context: ComposeContext, isOverlay: Bool, alignment: Alignment, target: @Composable (ComposeContext) -> Void, dependent: @Composable (ComposeContext) -> Void) {
+    let glassLayer = rememberLiquidGlassLayer() // Liquid Glass: glass in the view in front refracts the view behind, see LiquidGlassLayer.kt
     // ComposeContainer is needed to properly handle content that fills width/height
     ComposeContainer(modifier: context.modifier) { modifier in
         Layout(modifier: modifier, content: {
-            target(context.content())
+            LiquidGlassLayeredContent(glassLayer, isBehind: isOverlay) { target(context.content()) } // Liquid Glass
             // Dependent view lays out with fixed bounds dictated by the target view size
             ComposeContainer(fixedWidth: true, fixedHeight: true) { modifier in
-                dependent(context.content(modifier: modifier))
+                LiquidGlassLayeredContent(glassLayer, isBehind: !isOverlay) { dependent(context.content(modifier: modifier)) } // Liquid Glass
             }
         }) { measurables, constraints in
             guard !measurables.isEmpty() else {
