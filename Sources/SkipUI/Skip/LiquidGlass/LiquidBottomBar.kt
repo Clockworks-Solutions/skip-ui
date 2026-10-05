@@ -1,64 +1,46 @@
 // SPDX-License-Identifier: MPL-2.0
 //
-// Liquid Glass: floating glass tab bar built on Kyant's backdrop library.
+// Liquid Glass: the floating glass tab bar, built on Kyant's backdrop library.
 // https://github.com/Kyant0/AndroidLiquidGlass
 package skip.ui.liquidglass
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.EaseOut
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import android.content.res.Configuration
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -68,16 +50,15 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -85,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -96,60 +78,48 @@ import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.launch
-
 
 /**
- * A single tab in a [LiquidGlassTabBar].
+ * One tab of a [LiquidGlassTabBar].
  *
- * @property icon The tab icon, drawn in a fixed-size box.
- * @property title The tab label, drawn below the icon.
- * @property content The body shown when the tab is selected. Not used by [LiquidGlassTabView], where `TabView` renders the content.
- * @property isEnabled Whether the tab can be selected. A disabled tab is dimmed, ignores taps, and the selection pill
- *   snaps past it, matching the Material `NavigationBarItem` for a `.disabled` tab.
+ * @property isEnabled A disabled tab is dimmed, ignores taps, and the pill snaps past it.
  */
-internal class GlassTab(
-    val icon: @Composable () -> Unit,
-    val title: @Composable () -> Unit,
-    val content: @Composable () -> Unit,
-    val isEnabled: Boolean = true
-)
+@Immutable
+internal class GlassTab(val icon: @Composable () -> Unit, val title: @Composable () -> Unit, val isEnabled: Boolean = true)
+
+private val capsuleShape = RoundedCornerShape(percent = 50)
+private val labelStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal)
+private val minimizeAnimation = spring(0.9f, 400f, 0.001f)
+
+/** The inset between the bar's edge and its tabs, which the pill keeps too. */
+private val tabInset = 4.dp
+
+/** How much shorter than the bar the pill and the accent copy are. */
+private val pillInset = 9.dp
+
+/** The bar's height at [minimizeProgress]. */
+private fun barHeight(minimizeProgress: Float): Dp = lerp(liquidGlassTabBarHeight, liquidGlassMinimizedTabBarHeight, minimizeProgress)
 
 /**
- * The Liquid Glass tab bar for SkipUI's `TabView`: a [LiquidGlassTabBar] floating over the tab content, in place of
- * the Material `NavigationBar`.
+ * The glass bar for SkipUI's `TabView`, floating over the tab content in place of the Material `NavigationBar`.
  *
- * The `TabView` owns the tab content, back stacks, and selection; this only renders the bar. It takes no height in the
- * tab view layout, so tab content extends to the bottom of the screen and scrolls beneath the glass. The bar draws
- * upward from the bottom edge and is sized to about 88dp per tab, capped to the available width minus 24dp on each side.
+ * Takes no height, so content scrolls beneath it. About 88dp per tab, within 24dp side margins; it sits above the
+ * system bar, or an outer bar when nested, and publishes its footprint through [LiquidGlassTabBarState]. Minimizing
+ * animates the bar's size while laying out, so the tabs aren't recomposed on each frame.
  *
- * It sits above whatever already occupies the bottom of the content it floats over: the system navigation bar, and the
- * outer bar too when one `TabView` is nested in another. It reports its own footprint through
- * [LiquidGlassTabBarState.inset], which is how a nested bar, and a bottom toolbar, know to stay above it.
- *
- * @param state The bar state shared with the `TabView`, holding the backdrop it refracts and its minimized state.
- * @param tabIndices The `TabView` indices of the visible tabs, in display order. Hidden and conditional tabs are omitted.
- * @param selectedTabIndex The `TabView` index of the selected tab.
- * @param icon Renders the icon for a `TabView` index.
- * @param label Renders the title for a `TabView` index, if tabs have titles.
- * @param isEnabled Whether the tab at a `TabView` index can be selected.
- * @param onTabSelected Called with the `TabView` index of the tab the user selects, on every tap, including a tap on
- *   the already-selected tab.
- * @param accentColor The selected tab color, from the `TabView` tint or the app accent color.
- *   `Color.Unspecified` falls back to the default blue.
- * @param backgroundColor A color drawn over the glass frost, from `.toolbarBackground(_:for: .tabBar)`.
- *   `Color.Unspecified` or a fully transparent color leaves the bar clear.
- * @param contentColor The unselected icon and label color. `Color.Unspecified` uses black or white for the theme.
+ * @param tabIndices The `TabView` indices of the visible tabs, in order.
+ * @param onTabSelected Called on every tap, including on the selected tab.
+ * @param accentColor The selected tab's color; unspecified falls back to the system blue.
+ * @param backgroundColor A `.toolbarBackground(_:for: .tabBar)` color drawn over the frost.
+ * @param contentColor The unselected tab color; unspecified follows the glass.
  */
 @Composable
 internal fun LiquidGlassTabView(
     state: LiquidGlassTabBarState,
-    tabIndices: kotlin.collections.List<Int>,
+    tabIndices: List<Int>,
     selectedTabIndex: Int,
     icon: @Composable (Int) -> Unit,
     label: (@Composable (Int) -> Unit)?,
@@ -160,76 +130,58 @@ internal fun LiquidGlassTabView(
     contentColor: Color = Color.Unspecified
 ) {
     if (tabIndices.isEmpty()) return
-
-    // Map TabView indices to glass tabs; LiquidGlassTabBar works in display positions
-    val tabs = tabIndices.map { tabIndex ->
-        GlassTab(icon = { icon(tabIndex) }, title = { label?.invoke(tabIndex) }, content = {}, isEnabled = isEnabled(tabIndex))
+    val tabs = tabIndices.map { GlassTab(icon = { icon(it) }, title = { label?.invoke(it) }, isEnabled = isEnabled(it)) }
+    // 0 full size, 1 minimized to the selected tab; read only while laying out and drawing
+    val minimize = remember { Animatable(if (state.isMinimized) 1f else 0f) }
+    // Observed here rather than read in composition, so minimizing doesn't recompose the bar
+    LaunchedEffect(state, minimize) {
+        snapshotFlow { state.isMinimized }.collectLatest { minimize.animateTo(if (it) 1f else 0f, minimizeAnimation) }
     }
-    val selectedPosition = tabIndices.indexOf(selectedTabIndex).coerceAtLeast(0)
+    val minimizeProgress: () -> Float = remember(minimize) { { minimize.value } }
 
-    // 0 at full size, 1 minimized to a pill holding only the selected tab, as the iOS bar does when scrolled
-    val minimizeProgress by animateFloatAsState(
-        targetValue = if (state.isMinimized) 1f else 0f,
-        animationSpec = spring(0.9f, 400f, 0.001f),
-        label = "minimize"
-    )
-
-    // Zero-height slot so the TabView gives its content the full height; the bar overflows upward over the content
+    // A zero-height slot: the bar overflows upward over the content
     Box(modifier = Modifier.fillMaxWidth().height(0.dp).zIndex(1f)) {
-        // Measure available width, then size the bar to content (ideal 88dp per tab),
-        // falling back to equal sharing when the screen is too narrow
         val density = LocalDensity.current
-        // Stack on top of whatever is already at the bottom of this content: the system navigation bar at the top
-        // level, and the outer bar's whole footprint when one TabView is nested in another
-        val inheritedInset = LocalGlassTabBarInset.current
         val systemBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        val bottomInsetHeight = if (inheritedInset > 0.dp) inheritedInset else systemBottomInset
-        val bottomInset = Modifier.padding(bottom = bottomInsetHeight)
-        val barHeight = liquidGlassTabBarHeight * (1f - minimizeProgress) + liquidGlassMinimizedTabBarHeight * minimizeProgress
+        // Above the system bar, or the outer bar's footprint when nested
+        val bottomInset = LocalGlassTabBarInset.current.takeIf { it > 0.dp } ?: systemBottomInset
 
-        // Drawn first, so the bar sits on top of it
         LiquidGlassTabBarEdgeEffect(
             backdrop = state.backdrop,
-            height = bottomInsetHeight + 2.dp + barHeight + liquidGlassTabBarEdgeFade,
+            height = { bottomInset + 2.dp + barHeight(minimizeProgress()) + liquidGlassTabBarEdgeFade },
             minimizeProgress = minimizeProgress,
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight(align = Alignment.Bottom, unbounded = true)
+            modifier = Modifier.fillMaxWidth().wrapContentHeight(align = Alignment.Bottom, unbounded = true)
         )
-
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight(align = Alignment.Bottom, unbounded = true)
-                .then(bottomInset)
-                .padding(bottom = 2.dp),
+                .padding(bottom = bottomInset + 2.dp),
             contentAlignment = Alignment.Center
         ) {
-            val idealPx = with(density) { (88.dp * tabs.size).toPx() }
-            val maxPx = (constraints.maxWidth.toFloat() - with(density) { (liquidGlassTabBarSideMargin * 2f).toPx() })
-                .coerceAtLeast(0f)
-            val fullBarWidth = with(density) { idealPx.coerceAtMost(maxPx).toDp() }
-            // Minimized, the bar is just wide enough for the selected tab's icon
-            val barWidth = fullBarWidth * (1f - minimizeProgress) + liquidGlassMinimizedTabBarWidth * minimizeProgress
-            // and it tucks into the leading edge rather than staying centered, so it slides out of the way of the
-            // content instead of sitting in the middle of it. The offset follows the same animation as the width
-            val containerWidth = with(density) { constraints.maxWidth.toDp() }
-            val centeredStart = (containerWidth - barWidth) / 2f
-            val barOffsetX = (liquidGlassTabBarSideMargin - centeredStart) * minimizeProgress
+            val availableWidth = maxWidth
+            val fullWidth = minOf(88.dp * tabs.size, (availableWidth - liquidGlassTabBarSideMargin * 2f).coerceAtLeast(0.dp))
             LiquidGlassTabBar(
                 backdrop = state.backdrop,
                 tabs = tabs,
-                selectedIndex = selectedPosition,
-                onTabSelected = { position -> onTabSelected(tabIndices[position]) },
+                selectedIndex = tabIndices.indexOf(selectedTabIndex).coerceAtLeast(0),
+                onTabSelected = { onTabSelected(tabIndices[it]) },
                 modifier = Modifier
-                    .width(barWidth)
-                    .offset(x = barOffsetX)
-                    .onGloballyPositioned { coordinates ->
-                        // Only at full size: anything reading the inset — a nested bar, a bottom toolbar — would
-                        // otherwise move on every frame of the minimize animation, for a bar that soon comes back
-                        if (minimizeProgress == 0f) {
-                            state.inset = bottomInsetHeight + 2.dp + with(density) { coordinates.size.height.toDp() }
-                            // Scrollables already keep the system navigation bar clear through the safe area
+                    .layout { measurable, constraints ->
+                        val progress = minimizeProgress()
+                        val width = lerp(fullWidth, liquidGlassMinimizedTabBarWidth, progress)
+                        val placeable = measurable.measure(Constraints.fixedWidth(width.roundToPx()).copy(maxHeight = constraints.maxHeight))
+                        layout(placeable.width, placeable.height) {
+                            // Minimizing tucks the bar into the leading edge, out of the content's way
+                            val offset = (liquidGlassTabBarSideMargin - (availableWidth - width) / 2f) * progress
+                            placeable.placeRelative(offset.roundToPx(), 0)
+                        }
+                    }
+                    .onGloballyPositioned {
+                        // Only at full size, so what reads the inset doesn't move through the minimize animation
+                        if (minimizeProgress() == 0f) {
+                            state.inset = bottomInset + 2.dp + with(density) { it.size.height.toDp() }
+                            // Scrollables clear the system bar through the safe area already
                             state.contentInset = (state.inset - systemBottomInset).coerceAtLeast(0.dp)
                         }
                     },
@@ -244,91 +196,58 @@ internal fun LiquidGlassTabView(
 }
 
 /**
- * The soft edge the bar floats on: the content behind it blurs out toward the bottom of the screen.
- *
- * Content scrolls under the floating bar, which otherwise leaves it running sharply off the bottom edge and through
- * the gaps beside the bar. iOS blurs the whole bottom strip instead, so the bar reads as sitting on the content rather
- * than being cut out of it. A blurred copy of the same backdrop the bar refracts is drawn over that strip, masked by a
- * vertical gradient, so the blur fades in from nothing at the top to full at the bottom edge.
- *
- * Drawn before the bar, which then refracts the unblurred backdrop over the top of it.
- *
- * Fades out as the bar minimizes: a strip across the whole width has nothing to soften once the bar has shrunk to a
- * pill in the corner, and the content is meant to be read while it scrolls.
- *
- * @param backdrop The recorded tab content, the same one the bar refracts.
- * @param height How far up from the bottom of the screen the strip reaches.
- * @param minimizeProgress 0 with the bar at full size, 1 once it is minimized and the strip is gone.
- * @param modifier The modifier to apply, which places the strip against the bottom of the tab bar slot.
+ * The strip the bar floats on, blurring the content toward the screen's bottom edge as iOS does, so the bar sits on the
+ * content rather than being cut out of it. Fades out as the bar minimizes.
  */
 @Composable
-private fun LiquidGlassTabBarEdgeEffect(backdrop: Backdrop, height: Dp, minimizeProgress: Float, modifier: Modifier = Modifier) {
-    if (minimizeProgress >= 1f) {
-        return
-    }
+private fun LiquidGlassTabBarEdgeEffect(backdrop: Backdrop, height: () -> Dp, minimizeProgress: () -> Float, modifier: Modifier = Modifier) {
+    val isHidden by remember { derivedStateOf { minimizeProgress() >= 1f } }
+    if (isHidden) return
+    // Starts low and never fully replaces the sharp content, so rows beside the bar stay readable
+    val mask = remember { Brush.verticalGradient(0f to Color.Transparent, 0.6f to Color.Black.copy(alpha = 0.25f), 1f to Color.Black.copy(alpha = 0.85f)) }
     Box(
         modifier = modifier
-            .height(height)
-            .alpha(1f - minimizeProgress)
-            // The gradient mask has to cut into the blurred copy rather than the screen, so it needs its own layer
-            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .animatedHeight(height)
+            .graphicsLayer {
+                alpha = 1f - minimizeProgress()
+                // Its own layer, so the gradient masks the blurred copy rather than the screen
+                compositingStrategy = CompositingStrategy.Offscreen
+            }
             .drawWithContent {
                 drawContent()
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        // Holds off until well down the strip, and never fully replaces the sharp content, so rows
-                        // beside the bar stay readable
-                        0f to Color.Transparent,
-                        0.6f to Color.Black.copy(alpha = 0.25f),
-                        1f to Color.Black.copy(alpha = 0.85f)
-                    ),
-                    blendMode = BlendMode.DstIn
-                )
+                drawRect(brush = mask, blendMode = BlendMode.DstIn)
             }
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { RectangleShape },
-                effects = { blur(4f.dp.toPx()) }
-            )
+            .drawBackdrop(backdrop = backdrop, shape = { RectangleShape }, effects = { blur(4f.dp.toPx()) })
     )
 }
 
 /**
- * A capsule-shaped Liquid Glass tab bar with a draggable selection pill.
+ * A capsule glass tab bar with a draggable selection pill.
  *
- * Tap a tab to select it, or drag the pill across tabs; it snaps to the nearest tab on release. While
- * pressed, the pill grows, stretches in the direction of travel, and shows a lens effect that magnifies
- * the accent-colored icon beneath it. The whole bar nudges slightly in the drag direction.
+ * Tap a tab, or drag the pill and release to snap. Pressed, the pill grows, stretches with its velocity and magnifies
+ * the accent-colored icon beneath it; the bar leans toward the drag. Drawn in four layers:
+ * 1. The glass bar with neutral icons and labels.
+ * 2. With [LiquidGlassStyle.accentLayer], a hidden accent-tinted copy of the icons for the pill to reveal; without it,
+ *    layer 1 tints the tab under the pill and feeds the pill.
+ * 3. The pill, which dims the selected tab at rest, as on iOS. Minimizing, it becomes the minimized bar, so the
+ *    selected tab stays selected throughout.
+ * 4. The badges, above the pill, as on iOS.
  *
- * The bar is built from three stacked layers:
- * 1. The visible glass bar with neutral icons and labels.
- * 2. A hidden, accent-tinted copy of the icons, recorded into a separate backdrop.
- * 3. The pill, which refracts both backdrops so the selected icon shows in the accent color.
+ * The moving parts live in a [LiquidGlassTabBarController] and are read only while laying out and drawing, so sliding
+ * the pill or minimizing redraws the bar without recomposing its tabs. The glass follows the system theme.
  *
- * [LiquidGlassTabView] uses this for SkipUI's `TabView`, or use this directly to place the bar over custom content.
- *
- * @param backdrop The recorded content behind the bar, typically from `rememberLayerBackdrop` applied to the
- *   screen content with `layerBackdrop`.
- * @param tabs The tabs to show. Only [GlassTab.icon], [GlassTab.title], and [GlassTab.isEnabled] are used.
- * @param selectedIndex The selected tab. Changes to this value move the pill.
- * @param onTabSelected Called with the index the user picked, by tap or by drag. A tap reports the tab even when it is
- *   already selected, so a re-tap reaches the app, as with the Material `NavigationBar`.
- * @param modifier The modifier to apply to the bar, usually a width.
- * @param style The tier's glass settings. Defaults to [LiquidGlassStyle.current]. Without [LiquidGlassStyle.accentLayer],
- *   layer 2 is skipped: layer 1 tints the tab under the pill with the accent color and feeds the pill's backdrop instead.
- * @param accentColor The selected tab color. `Color.Unspecified` falls back to the default blue, for callers
- *   outside `TabView`, which always passes the tint or the app accent color.
- * @param backgroundColor A color drawn over the glass frost, leaving the bar clear when it is `Color.Unspecified` or
- *   fully transparent. An opaque color makes the bar opaque, as it does for the Material bar.
- * @param contentColor The unselected icon and label color. `Color.Unspecified` uses black or white for the theme.
- * @param minimizeProgress 0 draws the full bar, 1 the minimized pill: labels gone, unselected tabs collapsed away, and
- *   only the selected icon left. Values between animate that.
- * @param onExpand Called when the user taps the minimized bar, which restores it on iOS.
+ * @param backdrop The recorded content behind the bar.
+ * @param onTabSelected Called with the picked position, by tap or drag, including a re-tap of the selected tab.
+ * @param accentColor The selected tab's color; unspecified falls back to the system blue.
+ * @param backgroundColor A color over the frost; opaque makes the bar opaque.
+ * @param contentColor The unselected tab color; unspecified follows the glass.
+ * @param minimizeProgress 0 the full bar, 1 minimized to the selected tab; read while laying out and drawing.
+ * @param onExpand Called on a tap of the minimized bar, which restores it on iOS.
  */
 @Composable
 internal fun LiquidGlassTabBar(
     backdrop: Backdrop,
-    tabs: kotlin.collections.List<GlassTab>,
+    tabs: List<GlassTab>,
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -336,413 +255,288 @@ internal fun LiquidGlassTabBar(
     accentColor: Color = Color.Unspecified,
     backgroundColor: Color = Color.Unspecified,
     contentColor: Color = Color.Unspecified,
-    minimizeProgress: Float = 0f,
+    minimizeProgress: () -> Float = { 0f },
     onExpand: (() -> Unit)? = null
 ) {
     if (tabs.isEmpty()) return
-
-    val isMinimized = minimizeProgress > 0.5f
-
-    val isLightTheme = !isSystemInDarkTheme()
-
-    val resolvedAccentColor = if (accentColor.isSpecified) accentColor else if (isLightTheme) Color(0xFF0088FF) else Color(0xFF0091FF)
-    val frostColor = liquidGlassFrostColor(isLightTheme)
-    // An app background color is drawn over the frost; the default one is fully transparent and leaves the glass clear
-    val hasBackgroundColor = backgroundColor.isSpecified && backgroundColor.alpha > 0f
-    val drawBarSurface: DrawScope.() -> Unit = {
-        drawRect(frostColor)
-        if (hasBackgroundColor) {
-            drawRect(backgroundColor)
-        }
+    val controller = rememberLiquidGlassTabBarController(tabs.size, selectedIndex, minimizeProgress)
+    val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+    SideEffect {
+        controller.tabs = tabs
+        controller.onTabSelected = onTabSelected
+        controller.onExpand = onExpand
+        controller.isLtr = isLtr
+        controller.follow(selectedIndex)
     }
 
-    val baseContentColor = if (contentColor.isSpecified && contentColor.alpha > 0f) contentColor else if (isLightTheme) Color.Black else Color.White
-    val isCompactLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val iconSize = if (isCompactLandscape) 22.dp else 30.dp
-    // SkipUI draws a tab icon at 1.5x the current font size, so a larger text style grows the icon itself. Scaling the
-    // whole icon instead would scale its badge with it, and blur the glyph
-    val iconTextStyle = LocalTextStyle.current.copy(fontSize = (iconSize.value / 1.5f).sp)
-    val labelTextStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal)
-    val labelTextStyleBold = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-    val minimumTouchTarget = 44.dp * (1f - minimizeProgress)
-    val barHeight = liquidGlassTabBarHeight * (1f - minimizeProgress) + liquidGlassMinimizedTabBarHeight * minimizeProgress
-    val disabledContentAlpha = 0.38f // Material's disabled content alpha, applied over the bar's already-faded tabs
+    // The system theme's glass
+    val isLight = !isSystemInDarkTheme()
+    val accent = if (accentColor.isSpecified) accentColor else if (isLight) Color(0xFF0088FF) else Color(0xFF0091FF)
+    val frost = liquidGlassFrostColor()
+    val baseContent = if (contentColor.isSpecified && contentColor.alpha > 0f) contentColor else if (isLight) Color.Black else Color.White
+    val drawBarSurface: DrawScope.() -> Unit = {
+        drawRect(frost)
+        if (backgroundColor.isSpecified && backgroundColor.alpha > 0f) drawRect(backgroundColor)
+    }
+
+    val iconSize = if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) 22.dp else 30.dp
+    val textStyle = LocalTextStyle.current
+    // SkipUI draws a tab icon at 1.5× the font size, so the icon is sized through the text style
+    val cellStyle = remember(iconSize, textStyle) { GlassTabCellStyle(iconSize, textStyle.copy(fontSize = (iconSize.value / 1.5f).sp)) }
 
     val tabsBackdrop = rememberLayerBackdrop()
+    val rimHighlight = rememberLiquidGlassHighlight()
     val animationScope = rememberCoroutineScope()
+    val maxLean = with(LocalDensity.current) { 4.dp.toPx() }
+    val insetPx = with(LocalDensity.current) { tabInset.toPx() }
+    val layers = GlassTabBarLayers(controller, tabs, cellStyle, backdrop, style, rimHighlight, maxLean)
 
-    BoxWithConstraints(
-        modifier = modifier,
+    // The press glow, anchored to the pill rather than the finger
+    val glow = remember(controller) {
+        InteractiveHighlight(animationScope = animationScope, position = { size, _ ->
+            val center = insetPx + controller.pillStart(controller.contentWidth) + controller.pillWidth(controller.contentWidth) / 2f
+            Offset((if (controller.isLtr) center else size.width - center) + controller.leanOffset(maxLean), size.height / 2f)
+        })
+    }
+
+    Box(
+        modifier = modifier.layout { measurable, constraints ->
+            val height = barHeight(minimizeProgress()).roundToPx()
+            val placeable = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
+            // Plain, not observed: drags and the glow read it, and they are re-run anyway
+            controller.contentWidth = (placeable.width - tabInset.roundToPx() * 2).toFloat()
+            layout(placeable.width, height) { placeable.place(0, 0) }
+        },
         contentAlignment = Alignment.CenterStart
     ) {
-        val density = LocalDensity.current
-        val tabWidth = with(density) {
-            (constraints.maxWidth.toFloat() - 8f.dp.toPx()) / tabs.size
-        }
+        layers.Bar(tabsBackdrop, drawBarSurface, glow, baseContent, accent)
+        if (style.accentLayer) layers.AccentCopy(tabsBackdrop, drawBarSurface, glow, accent)
+        layers.Pill(tabsBackdrop, glow, isLight)
+        layers.Badges()
+    }
+}
 
-        // Rubber-band nudge: the whole bar leans slightly in the drag direction,
-        // decaying via EaseOut, then springs back to 0 once the drag ends
-        val offsetAnimation = remember { Animatable(0f) }
-        val panelOffset by remember(density) {
-            derivedStateOf {
-                val fraction = (offsetAnimation.value / constraints.maxWidth).coerceIn(-1f, 1f)
-                with(density) {
-                    4f.dp.toPx() * (if (fraction >= 0f) 1f else -1f) * EaseOut.transform(abs(fraction))
-                }
-            }
-        }
+/** The per-bar sizes every tab cell shares. */
+@Immutable
+private data class GlassTabCellStyle(val iconSize: Dp, val iconTextStyle: TextStyle)
 
-        val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+/** The bar's four layers, sharing one controller and appearance. Each reads the controller only while drawing. */
+private class GlassTabBarLayers(
+    private val controller: LiquidGlassTabBarController,
+    private val tabs: List<GlassTab>,
+    private val cellStyle: GlassTabCellStyle,
+    private val backdrop: Backdrop,
+    private val style: LiquidGlassStyle,
+    private val rimHighlight: (Float) -> Highlight,
+    private val maxLean: Float
+) {
+    private val pill get() = controller.pill
 
-        // Local mirror of selectedIndex: driven by taps, drag-stop, and external
-        // selectedIndex changes alike, so the pill animation has one source of truth
-        var currentIndex by remember { mutableIntStateOf(selectedIndex) }
-
-        // The drag animation below is remembered across recompositions, so it reads the callback and the tabs through
-        // these holders rather than capturing the first composition's values
-        val latestOnTabSelected = rememberUpdatedState(onTabSelected)
-        val latestTabs = rememberUpdatedState(tabs)
-
-        // A disabled tab can't take the selection, so a drag released over one snaps to the closest tab that can
-        fun nearestEnabledIndex(index: Int): Int {
-            val currentTabs = latestTabs.value
-            if (currentTabs.getOrNull(index)?.isEnabled != false) {
-                return index
-            }
-            for (distance in 1 until currentTabs.size) {
-                if (currentTabs.getOrNull(index - distance)?.isEnabled == true) {
-                    return index - distance
-                }
-                if (currentTabs.getOrNull(index + distance)?.isEnabled == true) {
-                    return index + distance
-                }
-            }
-            return index
-        }
-
-        // Drives the pill position as a fractional tab index.
-        // pressProgress / scaleX / scaleY animate on press for the squish effect
-        val anim = remember {
-            DampedDragAnimation(
-                animationScope = animationScope,
-                initialValue = selectedIndex.toFloat(),
-                valueRange = 0f..(tabs.size - 1).toFloat(),
-                visibilityThreshold = 0.001f,
-                initialScale = 1f,
-                pressedScale = 1.4f,
-                onDragStarted = { _ -> },
-                onDragStopped = {
-                    val targetIndex = nearestEnabledIndex(targetValue.roundToInt().coerceIn(0, tabs.size - 1))
-                    currentIndex = targetIndex
-                    animateToValue(targetIndex.toFloat())
-                    // The pill covers the selected tab and takes its touches, so this also reports a tap on the
-                    // selected tab, which is how a re-tap reaches the app
-                    latestOnTabSelected.value(targetIndex)
-                    animationScope.launch {
-                        offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
-                    }
-                },
-                onDrag = { _, dragAmount ->
-                    val direction = if (isLtr) 1f else -1f
-                    updateValue(
-                        (targetValue + dragAmount.x / tabWidth * direction)
-                            .coerceIn(0f, (tabs.size - 1).toFloat())
-                    )
-                    animationScope.launch {
-                        offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
-                    }
-                }
-            )
-        }
-
-        // Sync externally-driven selection changes (e.g. back-stack navigation)
-        LaunchedEffect(selectedIndex) {
-            if (selectedIndex != currentIndex) currentIndex = selectedIndex
-        }
-        // Any currentIndex change (tap, drag-stop, or external selection) animates the pill. The tap and drag-stop
-        // handlers report the selection themselves, so a re-tap of the selected tab still reaches the caller
-        LaunchedEffect(anim) {
-            snapshotFlow { currentIndex }
-                .drop(1)
-                .collectLatest { index ->
-                    anim.animateToValue(index.toFloat())
-                }
-        }
-
-        // Shared glow, anchored to the pill's own position rather than the finger,
-        // fading in on press and out on release
-        val interactiveHighlight = remember {
-            InteractiveHighlight(
-                animationScope = animationScope,
-                position = { size, _ ->
-                    Offset(
-                        if (isLtr) (anim.value + 0.5f) * tabWidth + panelOffset
-                        else size.width - (anim.value + 0.5f) * tabWidth + panelOffset,
-                        size.height / 2f
-                    )
-                }
-            )
-        }
-
-        // ── Layer 1: visible glass bar + tab icons ──────────────────────────
-        // Without the accent layer, this layer feeds `tabsBackdrop` instead, so the pill still shows the
-        // (accent-tinted) icon beneath it.
-        Row(
+    /** Layer 1: the glass bar and its tabs, which take the taps. */
+    @Composable
+    fun Bar(tabsBackdrop: LayerBackdrop, drawSurface: DrawScope.() -> Unit, glow: InteractiveHighlight, contentColor: Color, accent: Color) {
+        LiquidGlassTabRow(
+            controller,
             modifier = Modifier
                 .then(if (style.accentLayer) Modifier else Modifier.layerBackdrop(tabsBackdrop))
-                .graphicsLayer { translationX = panelOffset }
+                .graphicsLayer { translationX = controller.leanOffset(maxLean) }
                 .drawBackdrop(
                     backdrop = backdrop,
-                    shape = { RoundedCornerShape(percent = 50) },
+                    shape = { capsuleShape },
                     effects = {
                         vibrancy()
-                        blur(8f.dp.toPx())
-                        if (style.lens) lens(24f.dp.toPx(), 24f.dp.toPx())
+                        blur(8.dp.toPx())
+                        if (style.lens) lens(24.dp.toPx(), 24.dp.toPx())
                     },
+                    highlight = { rimHighlight(1f) },
                     layerBlock = {
-                        // Grow the bar by up to 16dp in width while the pill is pressed
-                        val progress = anim.pressProgress
-                        val scale = 1f + (16f.dp.toPx() / size.width) * progress
+                        // Grows up to 16dp wider while the pill is pressed
+                        val scale = 1f + 16.dp.toPx() / size.width * pill.pressProgress
                         scaleX = scale
                         scaleY = scale
                     },
-                    onDrawSurface = drawBarSurface
+                    onDrawSurface = drawSurface
                 )
-                .then(interactiveHighlight.modifier)
-                .fillMaxWidth()
-                .height(barHeight)
-                .padding(5.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .then(glow.modifier)
+                .fillMaxSize()
+                .padding(horizontal = tabInset, vertical = 5.dp)
         ) {
-            tabs.forEachIndexed { index, tab ->
-                // Proximity: 1.0 at the selected tab, fading to 0 one tab away
-                val proximity = (1f - abs(anim.value - index.toFloat())).coerceIn(0f, 1f)
-                val isSelected = index == anim.value.roundToInt()
-
-                // Neutral icons fade out as the pill passes over them, letting the accent copy show through
-                val iconAlpha by animateFloatAsState(
-                    targetValue = (1f - proximity) * 0.5f,
-                    animationSpec = tween(durationMillis = 200),
-                    label = "Alpha_$index"
-                )
-
-                // Minimizing collapses every tab but the selected one, leaving its icon alone in the pill
-                val isMinimizingAway = index != currentIndex
-                val tabWeight = if (isMinimizingAway) (1f - minimizeProgress).coerceAtLeast(0.0001f) else 1f
-                val tabAlpha = when {
-                    !tab.isEnabled -> disabledContentAlpha
-                    isMinimizingAway -> 1f - minimizeProgress
-                    else -> 1f
-                }
-
-                Box(
-                    modifier = Modifier
-                        .weight(tabWeight)
-                        .fillMaxHeight()
-                        .sizeIn(minWidth = minimumTouchTarget, minHeight = minimumTouchTarget)
-                        // Fade the whole tab rather than only its content color, so an icon that draws its own colors dims too
-                        .alpha(tabAlpha)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            enabled = tab.isEnabled
-                        ) {
-                            if (isMinimized && onExpand != null) {
-                                // A tap on the minimized bar restores it, rather than changing tab
-                                onExpand()
-                            } else {
-                                currentIndex = index
-                                // Report every tap, including one on the selected tab, as the Material bar does
-                                latestOnTabSelected.value(index)
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    // With the accent layer, the selected tab's icon lives in layer 2 and is revealed by the pill, so
-                    // this layer draws it transparent. Minimized there is no pill, so it fades in here instead
-                    val tabContentColor = if (style.accentLayer) {
-                        if (isSelected) lerp(baseContentColor.copy(alpha = iconAlpha), resolvedAccentColor, minimizeProgress)
-                        else baseContentColor.copy(alpha = iconAlpha)
+            CompositionLocalProvider(LocalContentColor provides contentColor) {
+                tabs.forEachIndexed { index, tab ->
+                    val appearance = if (style.accentLayer) {
+                        // The icon under the pill gives way to the accent copy the pill reveals
+                        Modifier.graphicsLayer { alpha = controller.collapseAlpha(index) * (1f - controller.proximity(index)) }
                     } else {
-                        lerp(baseContentColor.copy(alpha = 0.5f), resolvedAccentColor, proximity)
+                        Modifier.accentTint(accent, amount = { controller.proximity(index) }, alpha = { controller.collapseAlpha(index) })
                     }
-                    // Without the accent layer, this layer also draws the selected tab, so it takes the bolder label
-                    val tabLabelTextStyle = if (!style.accentLayer && isSelected) labelTextStyleBold else labelTextStyle
-                    CompositionLocalProvider(
-                        LocalContentColor provides tabContentColor
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            Box(modifier = Modifier.size(iconSize), contentAlignment = Alignment.Center) {
-                                ProvideTextStyle(iconTextStyle) { tab.icon() }
-                            }
-                            ProvideTextStyle(tabLabelTextStyle) {
-                                Box(
-                                    modifier = Modifier
-                                        .wrapContentHeight()
-                                        .minimizedLabel(minimizeProgress)
-                                ) {
-                                    tab.title()
-                                }
-                            }
-                        }
+                    val tap = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, enabled = tab.isEnabled) {
+                        controller.tap(index)
                     }
+                    GlassTabCell(tab, GlassTabIconPart.ICON, cellStyle, controller.minimizeProgress, appearance.then(tap))
                 }
             }
         }
+    }
 
-        // ── Layer 2: hidden accent-tinted copy ──────────────────────────────
-        // Feeds `tabsBackdrop`. The pill below reveals a lens-distorted slice of
-        // this layer through a combined backdrop, which is why the icon under
-        // the glass pill reads as accent-colored while the rest stay neutral.
-        // Hidden from accessibility so tabs aren't announced twice. Skipped without the accent layer.
-        if (style.accentLayer) Row(
+    /** Layer 2: the hidden accent copy of the tabs, recorded for the pill to reveal; hidden from accessibility. */
+    @Composable
+    fun AccentCopy(tabsBackdrop: LayerBackdrop, drawSurface: DrawScope.() -> Unit, glow: InteractiveHighlight, accent: Color) {
+        LiquidGlassTabRow(
+            controller,
             modifier = Modifier
                 .clearAndSetSemantics {}
                 .alpha(0f)
                 .layerBackdrop(tabsBackdrop)
-                .graphicsLayer { translationX = panelOffset }
+                .graphicsLayer { translationX = controller.leanOffset(maxLean) }
                 .drawBackdrop(
                     backdrop = backdrop,
-                    shape = { RoundedCornerShape(percent = 50) },
+                    shape = { capsuleShape },
                     effects = {
-                        val progress = anim.pressProgress
                         vibrancy()
-                        blur(8f.dp.toPx())
-                        lens(
-                            24f.dp.toPx() * progress,
-                            24f.dp.toPx() * progress
-                        )
+                        blur(8.dp.toPx())
+                        val press = pill.pressProgress
+                        if (press > 0f) lens(24.dp.toPx() * press, 24.dp.toPx() * press)
                     },
-                    highlight = {
-                        Highlight.Default.copy(alpha = anim.pressProgress)
-                    },
-                    onDrawSurface = drawBarSurface
+                    highlight = { pill.pressProgress.takeIf { it > 0f }?.let(rimHighlight) },
+                    onDrawSurface = drawSurface
                 )
-                .then(interactiveHighlight.modifier)
+                .then(glow.modifier)
                 .fillMaxWidth()
-                .height(barHeight - 9.dp)
-                .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .animatedHeight { barHeight(controller.minimizeProgress()) - pillInset }
+                .padding(horizontal = tabInset)
         ) {
-            tabs.forEachIndexed { index, tab ->
-                val isMinimizingAway = index != currentIndex
-                Box(
-                    modifier = Modifier
-                        .weight(if (isMinimizingAway) (1f - minimizeProgress).coerceAtLeast(0.0001f) else 1f)
-                        .fillMaxHeight()
-                        .sizeIn(minWidth = minimumTouchTarget, minHeight = minimumTouchTarget)
-                        .alpha(if (tab.isEnabled) 1f else disabledContentAlpha),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CompositionLocalProvider(LocalContentColor provides resolvedAccentColor) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            Box(modifier = Modifier.size(iconSize), contentAlignment = Alignment.Center) {
-                                ProvideTextStyle(iconTextStyle) { tab.icon() }
-                            }
-                            ProvideTextStyle(labelTextStyleBold) {
-                                Box(
-                                    modifier = Modifier
-                                        .wrapContentHeight()
-                                        .minimizedLabel(minimizeProgress)
-                                ) {
-                                    tab.title()
-                                }
-                            }
-                        }
-                    }
+            CompositionLocalProvider(LocalContentColor provides accent) {
+                tabs.forEachIndexed { index, tab ->
+                    val appearance = if (tab.isEnabled) Modifier else Modifier.alpha(LiquidGlassTabBarController.disabledAlpha)
+                    GlassTabCell(tab, GlassTabIconPart.ICON, cellStyle, controller.minimizeProgress, appearance)
                 }
             }
         }
+    }
 
-        // ── Layer 3: sliding liquid pill + drag surface ─────────────────────
-        // `anim.modifier` is what actually receives touch drags; without it
-        // attached here, DampedDragAnimation never sees pointer input at all.
-        // Minimized, the bar itself is the pill, so this layer fades out and stops taking touches.
-        if (!isMinimized) Box(
+    /**
+     * Layer 3: the pill, which takes the drags. It covers the tab it is passing and, minimizing, grows into the minimized
+     * bar, so the selected tab never loses its pill.
+     */
+    @Composable
+    fun Pill(tabsBackdrop: LayerBackdrop, glow: InteractiveHighlight, isLight: Boolean) {
+        Box(
             modifier = Modifier
-                .alpha(1f - minimizeProgress)
-                .padding(horizontal = 4.dp)
-                .graphicsLayer {
-                    translationX =
-                        if (isLtr) anim.value * tabWidth + panelOffset
-                        else size.width - (anim.value + 1f) * tabWidth + panelOffset
+                .layout { measurable, constraints ->
+                    val progress = controller.minimizeProgress()
+                    val width = controller.pillWidth((constraints.maxWidth - tabInset.roundToPx() * 2).toFloat()).roundToInt().coerceAtLeast(0)
+                    val height = (barHeight(progress) - pillInset).roundToPx().coerceAtLeast(0)
+                    val placeable = measurable.measure(Constraints.fixed(width, height))
+                    layout(width, height) { placeable.place(0, 0) }
                 }
-                .then(interactiveHighlight.gestureModifier)
-                .then(anim.modifier)
+                .graphicsLayer {
+                    // Positioned while drawing, so a slide neither recomposes nor relayouts
+                    val inset = tabInset.toPx()
+                    val start = inset + controller.pillStart(controller.contentWidth)
+                    val x = if (controller.isLtr) start else controller.contentWidth + inset * 2f - start - size.width
+                    translationX = x + controller.leanOffset(maxLean)
+                }
+                .then(glow.gestureModifier)
+                .then(pill.modifier)
                 .drawBackdrop(
                     backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
-                    shape = { RoundedCornerShape(percent = 50) },
+                    shape = { capsuleShape },
+                    // Lens, rim and shadows only while pressed; at rest none is drawn at all
                     effects = {
-                        // Lens, highlight, and shadows only appear while pressed
-                        val progress = anim.pressProgress
-                        if (style.lens) lens(
-                            10f.dp.toPx() * progress,
-                            14f.dp.toPx() * progress,
-                            chromaticAberration = style.chromaticAberration
-                        )
+                        val press = pill.pressProgress
+                        if (style.lens && press > 0f) lens(10.dp.toPx() * press, 14.dp.toPx() * press, chromaticAberration = style.chromaticAberration)
                     },
-                    highlight = {
-                        // A faint rim at rest gives the pill a defined capsule edge, as on iOS, and it brightens on press
-                        Highlight.Default.copy(alpha = 0.4f + 0.6f * anim.pressProgress)
-                    },
-                    shadow = {
-                        Shadow(alpha = anim.pressProgress)
-                    },
-                    innerShadow = {
-                        InnerShadow(
-                            radius = 8f.dp * anim.pressProgress,
-                            alpha = anim.pressProgress
-                        )
-                    },
+                    highlight = { pill.pressProgress.takeIf { it > 0f }?.let(rimHighlight) },
+                    shadow = { pill.pressProgress.takeIf { it > 0f }?.let { Shadow(alpha = it) } },
+                    innerShadow = { pill.pressProgress.takeIf { it > 0f }?.let { InnerShadow(radius = 8.dp * it, alpha = it) } },
                     layerBlock = {
-                        scaleX = anim.scaleX
-                        scaleY = anim.scaleY
-
-                        // Stretch along the direction of travel and thin out vertically, capped at ±20%
-                        val velocity = anim.velocity / 10f
-                        scaleX /= 1f - (velocity * 0.75f).coerceIn(-0.2f, 0.2f)
-                        scaleY *= 1f - (velocity * 0.25f).coerceIn(-0.2f, 0.2f)
+                        // Stretches along its travel and thins, up to 20%; not once it is the minimized bar
+                        val expanded = 1f - controller.minimizeProgress()
+                        val velocity = pill.velocity / 10f
+                        val stretchX = pill.scaleX / (1f - (velocity * 0.75f).coerceIn(-0.2f, 0.2f))
+                        val stretchY = pill.scaleY * (1f - (velocity * 0.25f).coerceIn(-0.2f, 0.2f))
+                        scaleX = 1f + (stretchX - 1f) * expanded
+                        scaleY = 1f + (stretchY - 1f) * expanded
                     },
                     onDrawSurface = {
-                        // Resting: a light fill, so the pill reads as a bright capsule over the content rather than a
-                        // shadow. Pressed: nearly clear so the lens shows through
-                        val progress = anim.pressProgress
-                        drawRect(
-                            if (isLightTheme) Color.White.copy(alpha = 0.24f)
-                            else Color.White.copy(alpha = 0.16f),
-                            alpha = 1f - progress
-                        )
-                        drawRect(Color.Black.copy(alpha = 0.03f * progress))
+                        // Dims the selected tab at rest, as iOS does; clears when pressed and as the bar minimizes
+                        val dim = if (isLight) Color.Black.copy(alpha = 0.075f) else Color.White.copy(alpha = 0.1f)
+                        drawRect(dim, alpha = (1f - pill.pressProgress) * (1f - controller.minimizeProgress()))
                     }
                 )
-                .height(barHeight - 9.dp)
-                .fillMaxWidth(1f / tabs.size)
         )
+    }
+
+    /** Layer 4: badges over the pill, each laid out on an invisible copy of its tab. Takes no touches. */
+    @Composable
+    fun Badges() {
+        LiquidGlassTabRow(
+            controller,
+            modifier = Modifier
+                .clearAndSetSemantics {}
+                .graphicsLayer { translationX = controller.leanOffset(maxLean) }
+                .fillMaxSize()
+                .padding(horizontal = tabInset, vertical = 5.dp)
+        ) {
+            tabs.forEachIndexed { index, tab ->
+                val appearance = Modifier.graphicsLayer { alpha = controller.collapseAlpha(index) }
+                GlassTabCell(tab, GlassTabIconPart.BADGE, cellStyle, controller.minimizeProgress, appearance, showsLabel = false)
+            }
+        }
     }
 }
 
-/**
- * Collapses a tab label as the bar minimizes: it fades out and gives up its height, so the icon settles into the
- * middle of the shrinking bar instead of the label leaving a gap behind it.
- */
-private fun Modifier.minimizedLabel(progress: Float): Modifier {
-    if (progress <= 0f) {
-        return this
-    }
-    return this
-        .alpha(1f - progress)
-        .layout { measurable, constraints ->
-            val placeable = measurable.measure(constraints)
-            layout(placeable.width, (placeable.height * (1f - progress)).roundToInt()) {
-                placeable.place(0, 0)
+/** One tab: its icon over its label, which collapses as the bar minimizes. */
+@Composable
+private fun GlassTabCell(
+    tab: GlassTab,
+    iconPart: GlassTabIconPart,
+    style: GlassTabCellStyle,
+    minimizeProgress: () -> Float,
+    modifier: Modifier = Modifier,
+    showsLabel: Boolean = true
+) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Box(modifier = Modifier.size(style.iconSize), contentAlignment = Alignment.Center) {
+                ProvideTextStyle(style.iconTextStyle) { WithGlassTabIconPart(iconPart) { tab.icon() } }
+            }
+            ProvideTextStyle(labelStyle) {
+                Box(modifier = Modifier.wrapContentHeight().collapsingLabel(minimizeProgress).alpha(if (showsLabel) 1f else 0f)) {
+                    tab.title()
+                }
             }
         }
+    }
 }
+
+/** Fades a label out and gives up its height as the bar minimizes, so the icon settles into the middle. */
+private fun Modifier.collapsingLabel(progress: () -> Float): Modifier = this
+    .graphicsLayer { alpha = 1f - progress() }
+    .layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints)
+        layout(placeable.width, (placeable.height * (1f - progress())).roundToInt()) { placeable.place(0, 0) }
+    }
+
+/** Tints content toward [color] by [amount] and fades it to [alpha], both read while drawing. */
+private fun Modifier.accentTint(color: Color, amount: () -> Float, alpha: () -> Float): Modifier = this
+    .graphicsLayer {
+        this.alpha = alpha()
+        // Its own layer, so the tint covers only the tab's pixels
+        compositingStrategy = CompositingStrategy.Offscreen
+    }
+    .drawWithContent {
+        drawContent()
+        val tint = amount()
+        if (tint > 0f) drawRect(color, alpha = tint, blendMode = BlendMode.SrcAtop)
+    }
+
+/** A fixed height read while laying out, so an animated height relayouts without recomposing. */
+private fun Modifier.animatedHeight(height: () -> Dp): Modifier = layout { measurable, constraints ->
+    val heightPx = height().roundToPx().coerceAtLeast(0)
+    val placeable = measurable.measure(constraints.copy(minHeight = heightPx, maxHeight = heightPx))
+    layout(placeable.width, heightPx) { placeable.place(0, 0) }
+}
+
+/** The [Dp] [fraction] of the way from [start] to [end]. */
+private fun lerp(start: Dp, end: Dp, fraction: Float): Dp = start + (end - start) * fraction

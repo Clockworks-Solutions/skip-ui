@@ -543,7 +543,7 @@ public struct TabView : View, Renderable {
                                 tabIndex += 1
                             }
                             let activeEntries = decoratedEntrySlots[selectedTabIndex.value]!
-                            let defaults = NavDisplayTransitionOptions.tabViewDefaults
+                            let defaults = liquidGlassTabViewTransitionDefaults() // Liquid Glass: instant tab switches, see TabView+LiquidGlass.swift
                             let transitions = EnvironmentValues.shared._tabViewTransitions?(defaults) ?? defaults
                             NavDisplay(
                                 entries: activeEntries,
@@ -910,15 +910,12 @@ public struct Tab : TabContent, Renderable {
         let stripped = renderable.strip()
         // compute size of outer box (for padding)
         let textStyle = EnvironmentValues.shared.font?.fontImpl() ?? LocalTextStyle.current
-        let outerModifier: Modifier
+        var slotDp: Dp? = nil
         if textStyle.fontSize.isSp {
             let textSizeDp = with(LocalDensity.current) {
                 textStyle.fontSize.toDp()
             }
-            let slotDp = textSizeDp * Float(1.5)
-            outerModifier = context.modifier.then(Modifier.size(slotDp))
-        } else {
-            outerModifier = context.modifier
+            slotDp = textSizeDp * Float(1.5)
         }
         let renderImage: (@Composable () -> ()) = {
             if let label = stripped as? Label {
@@ -928,41 +925,21 @@ public struct Tab : TabContent, Renderable {
             }
         }
         let renderIcon: (@Composable () -> ()) = {
-            Box(
-                modifier: Modifier.graphicsLayer(scaleX: Float(1.5), scaleY: Float(1.5)),
-                contentAlignment: androidx.compose.ui.Alignment.Center
-            ) {
-                // Default to a lighter symbol weight so tab icons approximate SwiftUI sizing
-                if EnvironmentValues.shared._textEnvironment.fontWeight == nil {
-                    EnvironmentValues.shared.setValues {
-                        var textEnvironment = $0._textEnvironment
-                        textEnvironment.fontWeight = Font.Weight.light
-                        $0.set_textEnvironment(textEnvironment)
-                        return ComposeResult.ok
-                    } in: {
-                        renderImage()
-                    }
-                } else {
+            // Default to a lighter symbol weight so tab icons approximate SwiftUI sizing
+            if EnvironmentValues.shared._textEnvironment.fontWeight == nil {
+                EnvironmentValues.shared.setValues {
+                    var textEnvironment = $0._textEnvironment
+                    textEnvironment.fontWeight = Font.Weight.light
+                    $0.set_textEnvironment(textEnvironment)
+                    return ComposeResult.ok
+                } in: {
                     renderImage()
                 }
-            }
-        }
-
-        Box(modifier: outerModifier, contentAlignment: androidx.compose.ui.Alignment.Center) {
-            if let badge {
-                BadgedBox(
-                    badge: {
-                        Badge(modifier: Modifier.offset(x: 8.dp, y: -4.dp)) {
-                            badge.foregroundStyle(Color.white).Render(context: context)
-                        }
-                    }
-                ) {
-                    renderIcon()
-                }
             } else {
-                renderIcon()
+                renderImage()
             }
         }
+        RenderLiquidGlassTabIcon(stripped, slotSize: slotDp, badge: badge, context: context, icon: renderIcon) // Liquid Glass: icons kept inside their slot and badged as on iOS, see TabView+LiquidGlass.swift
     }
     #else
     public var body: some View {

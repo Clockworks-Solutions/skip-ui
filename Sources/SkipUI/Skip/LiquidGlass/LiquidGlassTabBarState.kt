@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 //
-// Liquid Glass: the state one `TabView` shares with its floating glass tab bar.
+// Liquid Glass: the state a `TabView` shares with its glass tab bar, and the insets glass chrome publishes.
 package skip.ui.liquidglass
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,94 +24,66 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlin.math.abs
 
 /**
- * What one `TabView` and its glass tab bar share.
+ * What one `TabView` and its glass bar share.
  *
- * The bar is drawn in the tab bar slot while the tab content it refracts is recorded somewhere else entirely, that
- * content has to know where the bar floats, and scrolling it minimizes the bar, so the pieces meet here. One instance
- * per `TabView` composition.
- *
- * @property backdrop The recorded tab content that the bar refracts.
+ * @property backdrop The recorded tab content the bar refracts.
  */
 internal class LiquidGlassTabBarState(val backdrop: LayerBackdrop) {
-    /**
-     * How far the bar reaches up from the bottom of the tab content, or 0 before it has been measured.
-     *
-     * The bar floats over the content rather than taking space in the layout, so content keeps drawing underneath and
-     * refracting through the glass. Only what must not be covered — a nested `TabView`'s own bar, a bottom toolbar —
-     * reads this and moves itself above the bar. Counted from the bottom of the content, so it covers the system
-     * navigation bar below the bar and any outer glass bar this one is nested inside.
-     */
+    /** The bar's whole footprint from the bottom of the content, system bar included; 0 until measured. */
     var inset by mutableStateOf(0.dp)
 
-    /**
-     * The part of [inset] a scrollable container has to add after its own content, or 0 before it is measured.
-     *
-     * The same footprint minus the system navigation bar, which scrollables already account for through the safe area.
-     * Content keeps drawing all the way down and refracting through the glass; this only lets the last row be scrolled
-     * out from under the bar, the way an iOS list clears a floating tab bar.
-     */
+    /** [inset] without the system bar: what a scrollable adds after its content to clear the bar. */
     var contentInset by mutableStateOf(0.dp)
 
-    /**
-     * Whether the bar is minimized to its compact pill.
-     *
-     * Set by scrolling when `tabBarMinimizeBehavior(_:)` asks for it, and cleared when the user taps the minimized bar.
-     */
+    /** Whether the bar is minimized to its pill. */
     var isMinimized by mutableStateOf(false)
 }
 
-/** Remembers the [LiquidGlassTabBarState] for one `TabView` composition. */
+/** A [LiquidGlassTabBarState] for one `TabView`, with its own content recording. */
 @Composable
 internal fun rememberLiquidGlassTabBarState(): LiquidGlassTabBarState {
     val backdrop = rememberLayerBackdrop()
     return remember(backdrop) { LiquidGlassTabBarState(backdrop) }
 }
 
-/**
- * How the glass tab bar reacts to the tab content scrolling, from SwiftUI's `tabBarMinimizeBehavior(_:)`.
- */
-internal enum class GlassTabBarMinimizeBehavior {
-    /** The bar keeps its full size. Also the behavior for `.automatic`, which does not minimize on iOS either. */
-    NEVER,
-    /** The bar minimizes while the user scrolls down the content, and returns while they scroll back up. */
-    ON_SCROLL_DOWN,
-    /** The reverse: the bar minimizes while the user scrolls up. */
-    ON_SCROLL_UP
-}
+/** `tabBarMinimizeBehavior(_:)` for the glass bar; `.automatic` never minimizes, as on iOS. */
+internal enum class GlassTabBarMinimizeBehavior { NEVER, ON_SCROLL_DOWN, ON_SCROLL_UP }
 
 /**
- * Watches the tab content scroll and minimizes or restores the bar.
+ * Minimizes and restores the bar as the tab content scrolls, following iOS 26:
+ * - Scrolling in the behavior's direction minimizes it; scrolling back restores it.
+ * - Reaching the top restores it, as does dragging past the bottom. A fling that only lands on the bottom doesn't.
+ * - Switching to a behavior that never minimizes restores it.
  *
- * Reads the scroll before the content does, and consumes nothing, so lists and scroll views behave exactly as they do
- * without it. A small run of scrolling in one direction is needed before the bar reacts, so a shaky finger or the
- * bounce at the end of a list does not flip it back and forth.
- *
- * @param state The bar state to drive.
- * @param behavior What the app asked for with `tabBarMinimizeBehavior(_:)`.
+ * Direction comes from what the content actually scrolled, after 12dp of travel, so edge bounces and a shaky finger
+ * don't flip the bar. Consumes nothing.
  */
 @Composable
-internal fun rememberGlassTabBarMinimizeConnection(
-    state: LiquidGlassTabBarState,
-    behavior: GlassTabBarMinimizeBehavior
-): NestedScrollConnection {
+internal fun rememberGlassTabBarMinimizeConnection(state: LiquidGlassTabBarState, behavior: GlassTabBarMinimizeBehavior): NestedScrollConnection {
     val thresholdPx = with(LocalDensity.current) { 12.dp.toPx() }
+    if (behavior == GlassTabBarMinimizeBehavior.NEVER && state.isMinimized) {
+        SideEffect { state.isMinimized = false }
+    }
     return remember(state, behavior, thresholdPx) {
         object : NestedScrollConnection {
             private var travel = 0f
 
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (behavior == GlassTabBarMinimizeBehavior.NEVER || available.y == 0f) {
-                    return Offset.Zero
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (behavior == GlassTabBarMinimizeBehavior.NEVER) return Offset.Zero
+                if (consumed.y != 0f) {
+                    // A turnaround starts the run over
+                    if ((travel < 0f) != (consumed.y < 0f)) travel = 0f
+                    travel += consumed.y
+                    if (abs(travel) >= thresholdPx) {
+                        // Content moves up (negative) as the user scrolls down
+                        val isScrollingDown = travel < 0f
+                        state.isMinimized = isScrollingDown == (behavior == GlassTabBarMinimizeBehavior.ON_SCROLL_DOWN)
+                        travel = 0f
+                    }
                 }
-                // Start over whenever the finger turns around, so only a deliberate run in one direction counts
-                if (travel != 0f && (travel < 0f) != (available.y < 0f)) {
-                    travel = 0f
-                }
-                travel += available.y
-                if (abs(travel) >= thresholdPx) {
-                    // Content moves up, a negative delta, as the user scrolls down through it
-                    val isScrollingDown = travel < 0f
-                    state.isMinimized = if (behavior == GlassTabBarMinimizeBehavior.ON_SCROLL_DOWN) isScrollingDown else !isScrollingDown
+                // Leftover scroll means an edge: downward is the top; upward is the bottom, counted only while dragging
+                if (available.y > 0f || (available.y < 0f && source == NestedScrollSource.UserInput)) {
+                    state.isMinimized = false
                     travel = 0f
                 }
                 return Offset.Zero
@@ -119,38 +92,53 @@ internal fun rememberGlassTabBarMinimizeConnection(
     }
 }
 
-/**
- * How far the glass tab bar reaches up over the content it floats above.
- *
- * Content that cannot be covered — a nested `TabView`'s bar, a bottom toolbar — pads itself by this. Zero outside a
- * `TabView`, and outside one whose bar is the Material `NavigationBar`, which takes its own space in the layout.
- */
+/** How far the glass bar reaches over the content; what must not be covered (a nested bar, a toolbar) pads by it. */
 internal val LocalGlassTabBarInset = compositionLocalOf { 0.dp }
 
-/**
- * Extra space a scrollable container adds after its content, so what ends up under the glass chrome floating over it
- * can still be scrolled into view.
- *
- * Unlike [LocalGlassTabBarInset] this moves nothing: content is laid out and drawn exactly as before, down to the
- * bottom of the screen and through the glass. It only makes the scrollable a little longer.
- */
+/** What a scrollable adds after its content to clear the glass chrome over it. Moves nothing. */
 internal val LocalGlassContentInset = compositionLocalOf { 0.dp }
 
-/** Provides both insets to the content of a `TabView` that floats a glass tab bar over it. */
+/**
+ * The height of a `safeAreaInset(edge: .bottom)` on a `TabView`. iOS draws it over the bar instead of lifting the bar,
+ * and the tabs' content clears the higher of the two.
+ */
+internal val LocalGlassOuterBottomInset = compositionLocalOf { 0.dp }
+
+/** Provides [LocalGlassOuterBottomInset] to a `TabView` with a bottom `safeAreaInset`. */
 @Composable
-internal fun WithGlassTabBarInset(inset: Dp, contentInset: Dp, content: @Composable () -> Unit) {
+internal fun WithGlassOuterBottomInset(inset: Dp, content: @Composable () -> Unit) =
+    CompositionLocalProvider(LocalGlassOuterBottomInset provides inset, content = content)
+
+/** Provides a `TabView`'s insets to its tabs, clearing the outer inset, which isn't theirs. */
+@Composable
+internal fun WithGlassTabBarInset(inset: Dp, contentInset: Dp, content: @Composable () -> Unit) =
     CompositionLocalProvider(
         LocalGlassTabBarInset provides inset,
-        LocalGlassContentInset provides contentInset
-    ) {
-        content()
-    }
-}
+        LocalGlassContentInset provides contentInset,
+        LocalGlassOuterBottomInset provides 0.dp,
+        content = content
+    )
 
-/** Provides [LocalGlassContentInset] alone, for chrome that floats over content inside a `TabView`. */
+/** Provides [LocalGlassContentInset], replacing the one from further out. */
 @Composable
-internal fun WithGlassContentInset(inset: Dp, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalGlassContentInset provides inset) {
-        content()
-    }
-}
+internal fun WithGlassContentInset(inset: Dp, content: @Composable () -> Unit) =
+    CompositionLocalProvider(LocalGlassContentInset provides inset, content = content)
+
+/**
+ * Starts a sheet or cover with none of the presenting screen's glass state. iOS presents in a fresh window; without
+ * this, Compose would hand on the outer bar's insets and backdrop, and a presented `TabView` would float its bar as if
+ * nested.
+ */
+@Composable
+internal fun WithoutGlassChrome(content: @Composable () -> Unit) =
+    CompositionLocalProvider(
+        LocalGlassTabBarInset provides 0.dp,
+        LocalGlassContentInset provides 0.dp,
+        LocalGlassOuterBottomInset provides 0.dp,
+        LocalGlassBackdrop provides null,
+        LocalGlassBackdropRequest provides null,
+        LocalGlassToolbarCapsule provides false,
+        LocalGlassToolbarItemMaxHeight provides Dp.Unspecified,
+        LocalGlassTabIconPart provides GlassTabIconPart.ALL,
+        content = content
+    )
