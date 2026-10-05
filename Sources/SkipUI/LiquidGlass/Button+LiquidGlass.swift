@@ -21,25 +21,13 @@ import androidx.compose.ui.unit.dp
 import skip.ui.liquidglass.__
 
 extension Button {
-    /// Render a Liquid Glass button for the `.glass` and `.glassProminent` styles.
+    /// Renders a `.glass` or `.glassProminent` button; `.bordered` or `.borderedProminent` on the `NATIVE` tier.
     ///
-    /// Draws the label on a `LiquidGlassButton` capsule, which samples `LocalGlassBackdrop` when a presentation provides one.
+    /// Label color, first match: destructive (`onError` on prominent, else `error`); the environment `foregroundStyle`;
+    /// white on prominent; the `tint`; else black or white to suit the glass. Prominent glass is tinted `error` when
+    /// destructive, else the `tint`, else `primary`. `material3GlassButton(_:)` customizes the result.
     ///
-    /// Label color, in order of precedence:
-    /// - For destructive buttons, `onError` over the error-tinted glass of prominent buttons, otherwise `error`
-    /// - The environment `foregroundStyle`
-    /// - White for prominent buttons, to read over the tinted glass
-    /// - The environment `tint`
-    /// - `Color.primary`
-    ///
-    /// Prominent buttons tint the glass with the Material `error` color when destructive, otherwise the environment `tint`,
-    /// otherwise the Material `primary` color. Use `material3GlassButton(_:)` to customize the resolved options.
-    ///
-    /// - Parameters:
-    ///   - isProminent: Whether to render the tinted `.glassProminent` variant.
-    ///   - action: The tap action, or nil for a button that does nothing when tapped.
-    ///
-    /// When the Liquid Glass tier is `NATIVE`, renders the Material `.bordered` or `.borderedProminent` style instead.
+    /// - Parameter action: The tap action; `nil` does nothing.
     @Composable static func RenderGlassButton(
         label: View,
         context: ComposeContext,
@@ -63,11 +51,10 @@ extension Button {
 
         var foregroundStyle: ShapeStyle
         if role == .destructive {
-			foregroundStyle = isProminent ? Color(colorImpl: { MaterialTheme.colorScheme.onError }) : Color(colorImpl: { MaterialTheme.colorScheme.error })
+            foregroundStyle = isProminent ? Color(colorImpl: { MaterialTheme.colorScheme.onError }) : Color(colorImpl: { MaterialTheme.colorScheme.error })
         } else if let envForegroundStyle = EnvironmentValues.shared._foregroundStyle {
             foregroundStyle = envForegroundStyle
         } else if isProminent {
-            // Prominent: text/icon is always white over the tinted surface
             foregroundStyle = Color.white
         } else if let tint = EnvironmentValues.shared._tint {
             foregroundStyle = tint
@@ -100,11 +87,9 @@ extension Button {
         }
         let contentContext = context.content()
 
-        // Already on a toolbar capsule: draw the label alone, the way iOS 26 merges a plain glass item into the
-        // capsule its group shares rather than nesting a second one inside it
+        // On a toolbar capsule a plain glass item draws its label alone, as iOS 26 merges it into the capsule. The plain
+        // style keeps the render from routing back here
         if !isProminent, isOnLiquidGlassToolbarCapsule() {
-            // Swap in the plain style before rendering: leaving the glass style in the environment would route straight
-            // back into this function
             let plainStyle: Any = PlainButtonStyle()
             let plainStackedStyle = StackedButtonStyle(style: plainStyle, parent: EnvironmentValues.shared._buttonStyle?.parent, source: ButtonStyleModifier(style: plainStyle))
             EnvironmentValues.shared.setValues {
@@ -132,53 +117,52 @@ extension Button {
                 contentPadding: options.contentPadding,
                 interactionSource: options.interactionSource
             ) {
-                label.Compose(context: contentContext)
+                // An oversized label is scaled to fit the capsule, or the toolbar it is on
+                LiquidGlassFitContent(maxHeight: liquidGlassToolbarItemMaxHeight()) {
+                    label.Compose(context: contentContext)
+                }
             }
         }
     }
 }
 
 extension View {
-    /// Compose glass button customization for `.glass` and `.glassProminent` button styles.
-    ///
-    /// The closure receives the options resolved from the button's role, tint, and enabled state, and returns the options
-    /// to render with.
+    /// Customizes `.glass` and `.glassProminent` buttons: receives the resolved options and returns those to render.
     public func material3GlassButton(_ options: @Composable (Material3GlassButtonOptions) -> Material3GlassButtonOptions) -> View {
         return environment(\._material3GlassButton, options, affectsEvaluate: false)
     }
 }
 
 extension EnvironmentValues {
-    /// Liquid Glass: customizes `.glass` and `.glassProminent` buttons. Set with `material3GlassButton(_:)`.
+    /// Set with `material3GlassButton(_:)`.
     var _material3GlassButton: (@Composable (Material3GlassButtonOptions) -> Material3GlassButtonOptions)? {
         get { builtinValue(key: "_material3GlassButton", defaultValue: { nil }) as! (@Composable (Material3GlassButtonOptions) -> Material3GlassButtonOptions)? }
         set { setBuiltinValue(key: "_material3GlassButton", value: newValue, defaultValue: { nil }) }
     }
 }
 
-/// Options for rendering a `.glass` or `.glassProminent` button with `LiquidGlassButton`.
-///
-/// - Seealso: ``View/material3GlassButton(_:)``
+/// The options a `.glass` or `.glassProminent` button renders with; see ``View/material3GlassButton(_:)``.
 public struct Material3GlassButtonOptions {
-    /// The tap action.
+    /// The button's action.
     public var onClick: () -> Void
-    /// The modifier applied to the glass capsule.
+    /// Applied to the glass capsule.
     public var modifier: Modifier = Modifier
-    /// Whether the button responds to taps.
+    /// Whether the button responds to touches; `false` when disabled or hit testing is off.
     public var enabled: Bool = true
-    /// Whether this is the tinted `.glassProminent` variant.
+    /// Whether this is `.glassProminent`.
     public var isProminent: Bool = false
-    /// The glass shape. Defaults to a capsule.
+    /// The glass shape; a capsule unless customized. Only a corner-based shape refracts.
     public var shape: androidx.compose.ui.graphics.Shape
-    /// The glass tint. Unspecified for `.glass`; the accent, `primary`, or `error` color for `.glassProminent`.
+    /// Unspecified for `.glass`; the tint, `primary` or `error` for `.glassProminent`.
     public var tint: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified
-    /// An overlay color drawn on the glass. When unspecified and there is no tint, a light or dark frost is used.
+    /// A fill in place of the frost.
     public var surfaceColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified
-    /// Padding between the glass edge and the label.
+    /// The inset around the label.
     public var contentPadding: PaddingValues = PaddingValues(horizontal: liquidGlassButtonContentInset, vertical: 8.dp)
-    /// An optional source for observing press state.
+    /// Observes the button's press and focus interactions; one is made if `nil`.
     public var interactionSource: MutableInteractionSource? = nil
 
+    /// A copy with the given options replaced, for Kotlin callers of ``View/material3GlassButton(_:)``.
     public func copy(
         onClick: () -> Void = self.onClick,
         modifier: Modifier = self.modifier,
