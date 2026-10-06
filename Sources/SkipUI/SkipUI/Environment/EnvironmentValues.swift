@@ -327,6 +327,7 @@ extension EnvironmentValues {
             return EnvironmentSupport(builtinValue: layoutDirection.rawValue)
         case "legibilityWeight":
             return EnvironmentSupport(builtinValue: legibilityWeight)
+        case "liquidGlass": return liquidGlassBridged() // Liquid Glass: bridged for SkipFuseUI, see LiquidGlass.swift
         case "lineLimit":
             return EnvironmentSupport(builtinValue: lineLimit)
         case "locale":
@@ -405,6 +406,7 @@ extension EnvironmentValues {
             return true
         case "legibilityWeight":
             return false
+        case "liquidGlass": return setLiquidGlassBridged(value) // Liquid Glass: bridged for SkipFuseUI, see LiquidGlass.swift
         case "lineLimit":
             setlineLimit(value?.builtinValue as? Int)
             return true

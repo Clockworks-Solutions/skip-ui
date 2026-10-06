@@ -136,7 +136,7 @@ extension View {
     public func background(_ style: any ShapeStyle, ignoresSafeAreaEdges edges: Edge.Set = []) -> any View {
         #if SKIP
         if edges.isEmpty {
-            return ModifiedContent(content: self, modifier: RenderModifier { context in
+            let backgroundModifier = RenderModifier { context in
                 if let color = style.asColor(opacity: 1.0, animationContext: context) {
                     return context.modifier.background(color)
                 } else if let brush = style.asBrush(opacity: 1.0, animationContext: context) {
@@ -144,7 +144,9 @@ extension View {
                 } else {
                     return context.modifier
                 }
-            })
+            }
+            backgroundModifier.action = liquidGlassColorBackgroundAction(style, render: backgroundModifier.action) // Liquid Glass: glass in the view refracts the color, see Layout+LiquidGlass.swift
+            return ModifiedContent(content: self, modifier: backgroundModifier)
         } else {
             return background {
                 style.ignoresSafeArea(edges: edges)

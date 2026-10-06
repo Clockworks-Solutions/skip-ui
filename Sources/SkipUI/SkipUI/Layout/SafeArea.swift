@@ -193,10 +193,14 @@ final class SafeAreaInsetModifier: RenderModifier {
                 insetModifier = Modifier.fillMaxHeight().onSizeChanged { size in insetLength.value = Double(size.width) / Double(density.density) }
                 insetAlignment = androidx.compose.ui.Alignment.CenterEnd
             }
+            let lift = liquidGlassSafeAreaInsetLift(renderable, edge: edge) // Liquid Glass: above the glass tab bar, as on iOS, see SafeArea+LiquidGlass.swift
+            let glassLayer = rememberLiquidGlassLayer() // Liquid Glass: glass in the inset refracts the content behind it, see Layout+LiquidGlass.swift
             Box(modifier: context.modifier) {
-                RenderInset(renderable, insets: insets, context: context.content())
-                Box(modifier: Modifier.align(insetAlignment).then(insetModifier), contentAlignment: alignment.asComposeAlignment()) {
-                    inset.Compose(context: context.content())
+                LiquidGlassLayeredContent(glassLayer, isBehind: true) { // Liquid Glass
+                RenderLiquidGlassSafeAreaInsetContent(renderable, edge: edge, insets: insets, lift: lift) { RenderInset(renderable, insets: $0, context: context.content()) } // Liquid Glass: see SafeArea+LiquidGlass.swift
+                } // Liquid Glass
+                Box(modifier: Modifier.align(insetAlignment).padding(bottom: lift).then(insetModifier), contentAlignment: alignment.asComposeAlignment()) { // Liquid Glass: lifted by `lift`
+                    LiquidGlassLayeredContent(glassLayer, isBehind: false) { inset.Compose(context: context.content()) } // Liquid Glass
                 }
             }
         }

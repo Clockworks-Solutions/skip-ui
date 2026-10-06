@@ -633,6 +633,7 @@ struct ToolbarItems {
         let trailing: kotlin.collections.MutableList<Renderable> = mutableListOf()
         var principal: Renderable? = nil
         let bottom: kotlin.collections.MutableList<Renderable> = mutableListOf()
+        let confirmations: kotlin.collections.MutableList<Renderable> = mutableListOf() // Clockworks fork: last on the trailing side, as on iOS
         for view in content {
             let renderables = view.Evaluate(context: context, options: 0)
             for renderable in renderables {
@@ -647,12 +648,15 @@ struct ToolbarItems {
                         leading.add(renderable)
                     case .bottomBar:
                         bottom.add(renderable)
+                    case .confirmationAction: // Clockworks fork
+                        confirmations.add(renderable) // Clockworks fork
                     default:
                         trailing.add(renderable)
                     }
                 }
             }
         }
+        trailing.addAll(confirmations) // Clockworks fork
         if let principal {
             leading.add(principal)
         }

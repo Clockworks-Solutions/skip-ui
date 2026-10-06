@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: MPL-2.0
 //
-// Liquid Glass: device-adaptive rendering tier, resolved once per process with Blinkit's Droid Dex.
+// Liquid Glass: the rendering tier for this device, from Blinkit's Droid Dex.
 // https://github.com/grofers/droid-dex
 package skip.ui.liquidglass
 
+import android.app.ActivityManager
 import android.content.Context
-import android.os.SystemClock
+import android.content.SharedPreferences
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
 import kotlinx.coroutines.MainScope
@@ -26,20 +24,18 @@ import com.blinkit.droiddex.DroidDex
 import com.blinkit.droiddex.constants.PerformanceClass
 import com.blinkit.droiddex.constants.PerformanceLevel
 
-/**
- * How Liquid Glass is rendered on this device.
- */
+/** How Liquid Glass renders on this device. */
 internal enum class LiquidGlassTier {
-    /** The complete glass effect: blur, lens refraction, chromatic aberration, highlights, and animations. */
+    /** Blur, lens refraction with chromatic aberration, highlights and animations. */
     FULL,
 
-    /** Glass with blur, frost, highlights, and animations, but without lens refraction and chromatic aberration. */
+    /** Blur, rim highlight and animations, without refraction or the tab bar's accent layer. */
     REDUCED,
 
-    /** No glass: the upstream SkipUI Material rendering. */
+    /** No glass: upstream SkipUI's Material rendering. */
     NATIVE;
 
-    /** The glass effect settings for this tier, or `null` for [NATIVE], which renders no glass. */
+    /** The tier's glass settings, or `null` for [NATIVE]. */
     val style: LiquidGlassStyle?
         get() = when (this) {
             FULL -> LiquidGlassStyle.Full
@@ -48,122 +44,105 @@ internal enum class LiquidGlassTier {
         }
 
     companion object {
-        /**
-         * Maps a Droid Dex performance level to a tier.
-         *
-         * - `EXCELLENT`, `HIGH` → [FULL]
-         * - `AVERAGE` → [REDUCED]
-         * - `LOW`, `UNKNOWN` → [NATIVE]
-         */
-        internal fun from(level: PerformanceLevel): LiquidGlassTier = when (level) {
+        /** `EXCELLENT`/`HIGH` → [FULL], `AVERAGE` → [REDUCED], `LOW`/`UNKNOWN` → [NATIVE]. */
+        fun from(level: PerformanceLevel): LiquidGlassTier = when (level) {
             PerformanceLevel.EXCELLENT, PerformanceLevel.HIGH -> FULL
             PerformanceLevel.AVERAGE -> REDUCED
             PerformanceLevel.LOW, PerformanceLevel.UNKNOWN -> NATIVE
         }
-        /**
-		 * The tier when glass is forced but kept affordable: the top two device classes get [FULL], every other class —
-		 * including an unmeasured one — gets [REDUCED] rather than dropping to Material.
-		 */
-		internal fun optimized(level: PerformanceLevel): LiquidGlassTier = when (level) {
-			PerformanceLevel.EXCELLENT, PerformanceLevel.HIGH -> FULL
-			else -> REDUCED
-		}
+
+        /** As [from], but never [NATIVE]: for `LiquidGlass.forcedOptimized`. */
+        fun optimized(level: PerformanceLevel): LiquidGlassTier =
+            if (level == PerformanceLevel.EXCELLENT || level == PerformanceLevel.HIGH) FULL else REDUCED
     }
 }
-/**
- * The glass effect settings that differ between tiers. Glass components read these instead of fixed values.
- *
- * @property lens Whether glass refracts its backdrop with a lens effect.
- * @property chromaticAberration Whether the lens splits colors at the glass edge. Ignored without [lens].
- * @property accentLayer Whether the tab bar draws the hidden accent-tinted layer that the selection pill magnifies.
- */
-internal data class LiquidGlassStyle(
-    val lens: Boolean,
-    val chromaticAberration: Boolean,
-    val accentLayer: Boolean
-) {
-    companion object {
-        /** Settings for [LiquidGlassTier.FULL]: the current Liquid Glass look. */
-        val Full = LiquidGlassStyle(lens = true, chromaticAberration = true, accentLayer = true)
 
-        /** Settings for [LiquidGlassTier.REDUCED]: drops the GPU-heavy lens shader work. */
+/**
+ * The glass effects that differ between tiers.
+ *
+ * @property lens Whether glass refracts its backdrop.
+ * @property chromaticAberration Whether the lens splits colors at the edge. Ignored without [lens].
+ * @property accentLayer Whether the tab bar records an accent-tinted copy of its icons for the selection pill.
+ */
+internal data class LiquidGlassStyle(val lens: Boolean, val chromaticAberration: Boolean, val accentLayer: Boolean) {
+    companion object {
+        val Full = LiquidGlassStyle(lens = true, chromaticAberration = true, accentLayer = true)
+        // Blur and chrome only: refraction is reserved for `HIGH` and above
         val Reduced = LiquidGlassStyle(lens = false, chromaticAberration = false, accentLayer = false)
 
-        /**
-         * The settings for the resolved tier. [Full] while the tier is [LiquidGlassTier.NATIVE], where glass components
-         * are not rendered, so a component rendered directly keeps the complete look.
-         *
-         * Reads Compose state, so a component reading it during composition recomposes when the tier resolves.
-         */
-		val current: LiquidGlassStyle
-		@Composable get() = EnvironmentValues.shared.liquidGlassTier().style ?: Full
+        /** The resolved tier's settings; [Full] on `NATIVE`, for a component rendered directly. */
+        val current: LiquidGlassStyle
+            @Composable get() = EnvironmentValues.shared.liquidGlassTier().style ?: Full
     }
 }
 
 /**
- * Resolves the device class once per process from Droid Dex CPU and memory levels, which [tier] and
- * [optimizedTier] map to a rendering tier.
+ * The device class, fixed for the session at the first [resolve] so glass never switches while the app is open.
  *
- * [performanceLevel] starts `UNKNOWN`. Droid Dex measures on a background thread, and once both CPU and memory have a
- * level their average is stored and observation stops, so it changes at most once per session. A device that cannot
- * measure one of them stays `UNKNOWN`. Nothing is saved; the level is kept in memory only.
- *
- * [performanceLevel] is Compose state, so composables reading a tier derived from it recompose when it lands.
+ * The class comes from the level Droid Dex measured on an earlier launch, stored in the `skip.ui.liquidglass`
+ * preferences; on the very first launch, from an estimate made from memory and cores. Either is available
+ * synchronously, so the first frame already renders the right tier. Droid Dex still measures in the background each
+ * launch, and its result is stored for the next one.
  */
 internal object LiquidGlassCapability {
-    /** The measured device class. `UNKNOWN` until Droid Dex reports. */
-    var performanceLevel: PerformanceLevel by mutableStateOf(PerformanceLevel.UNKNOWN)
+    private const val preferencesName = "skip.ui.liquidglass"
+    private const val levelKey = "performanceLevel"
+
+    /** The device class for this session. `UNKNOWN` until [resolve]. */
+    var performanceLevel = PerformanceLevel.UNKNOWN
         private set
 
-    /** The tier for `LiquidGlass.adaptive`: glass only where the device can afford it. */
-    val tier: LiquidGlassTier
-        get() = LiquidGlassTier.from(performanceLevel)
+    /** The tier for `LiquidGlass.adaptive`. */
+    val tier: LiquidGlassTier get() = LiquidGlassTier.from(performanceLevel)
 
-    /** The tier for `LiquidGlass.forcedOptimized`: glass everywhere, full on the top two device classes. */
-    val optimizedTier: LiquidGlassTier
-        get() = LiquidGlassTier.optimized(performanceLevel)
+    /** The tier for `LiquidGlass.forcedOptimized`. */
+    val optimizedTier: LiquidGlassTier get() = LiquidGlassTier.optimized(performanceLevel)
 
-    /** The Droid Dex level name, for diagnostics. `null` until resolved. */
-    val performanceLevelName: String?
-        get() = if (performanceLevel == PerformanceLevel.UNKNOWN) null else performanceLevel.name
+    private var isResolved = false
 
-    /** Milliseconds from [resolve] to the resolved [tier], for diagnostics. `null` until resolved. */
-    var resolveDurationMs: Long? by mutableStateOf(null)
-        private set
-
-    private val scope = MainScope()
-    private var hasStarted = false
-
-    /**
-     * Starts resolving the tier. Only the first call has an effect; later calls return immediately.
-     *
-     * Must be called on the main thread, such as during composition.
-     *
-     * @param context Any context; its application context initializes Droid Dex.
-     */
+    /** Fixes the session's device class and starts measuring for the next launch. Only the first call has an effect. */
     fun resolve(context: Context) {
-        if (hasStarted) return
-        hasStarted = true
+        if (isResolved) return
+        isResolved = true
+        val appContext = context.applicationContext
+        val preferences = appContext.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
+        performanceLevel = preferences.storedLevel() ?: estimatedLevel(appContext)
+        measure(appContext, preferences)
+    }
 
-        val startTime = SystemClock.elapsedRealtime()
-        DroidDex.init(context.applicationContext)
+    private fun SharedPreferences.storedLevel(): PerformanceLevel? =
+        getString(levelKey, null)?.let { name -> PerformanceLevel.values().firstOrNull { it.name == name } }
+            ?.takeIf { it != PerformanceLevel.UNKNOWN }
 
-        scope.launch {
-            // Each level starts as UNKNOWN; suspend until both have been measured, then stop observing
+    /** A quick synchronous guess from total memory and cores, used until Droid Dex has measured once. */
+    private fun estimatedLevel(context: Context): PerformanceLevel {
+        val activityManager = context.getSystemService(ActivityManager::class.java) ?: return PerformanceLevel.AVERAGE
+        val memory = ActivityManager.MemoryInfo().also(activityManager::getMemoryInfo)
+        val gigabytes = memory.totalMem / (1024.0 * 1024.0 * 1024.0)
+        val cores = Runtime.getRuntime().availableProcessors()
+        return when {
+            activityManager.isLowRamDevice || gigabytes < 3 -> PerformanceLevel.LOW
+            gigabytes < 6 || cores < 6 -> PerformanceLevel.AVERAGE
+            else -> PerformanceLevel.HIGH
+        }
+    }
+
+    /** Measures CPU and memory with Droid Dex and stores their average for the next launch. */
+    private fun measure(context: Context, preferences: SharedPreferences) {
+        DroidDex.init(context)
+        MainScope().launch {
             combine(
                 DroidDex.getPerformanceLevelLd(PerformanceClass.CPU).asFlow(),
                 DroidDex.getPerformanceLevelLd(PerformanceClass.MEMORY).asFlow()
             ) { cpu, memory -> cpu != PerformanceLevel.UNKNOWN && memory != PerformanceLevel.UNKNOWN }
-                .first { isMeasured -> isMeasured }
-
-            resolveDurationMs = SystemClock.elapsedRealtime() - startTime
-            performanceLevel = DroidDex.getPerformanceLevel(PerformanceClass.CPU, PerformanceClass.MEMORY)
+                .first { it }
+            val level = DroidDex.getPerformanceLevel(PerformanceClass.CPU, PerformanceClass.MEMORY)
+            preferences.edit().putString(levelKey, level.name).apply()
         }
     }
 
-    /** Emits the LiveData's values while collected, observing on the main thread. */
     private fun <T> LiveData<T>.asFlow(): Flow<T> = callbackFlow {
-        val observer = Observer<T> { value -> trySend(value) }
+        val observer = Observer<T> { trySend(it) }
         observeForever(observer)
         awaitClose { removeObserver(observer) }
     }

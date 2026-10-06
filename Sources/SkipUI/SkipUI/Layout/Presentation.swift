@@ -193,6 +193,7 @@ private let AlertDialogMaxWidth: Dp = 560.dp
                 let stateSaver = remember { ComposeStateSaver() }
                 let presentationContext = context.content(stateSaver: stateSaver)
                 // Place inside of ModalBottomSheet, which renders content async
+                LiquidGlassPresentationContent { // Liquid Glass: nothing of the glass chrome beneath reaches a presentation, see TabView+LiquidGlass.swift
                 PresentationRoot(context: presentationContext, absoluteSystemBarEdges: systemBarEdges) { context in
                     EnvironmentValues.shared.setValues {
                         if !isFullScreen {
@@ -208,6 +209,7 @@ private let AlertDialogMaxWidth: Dp = 560.dp
                         }
                     }
                 }
+                } // Liquid Glass
             }
             if !isEdgeToEdge {
                 // Move the presentation root content area above the bottom bar
