@@ -6,7 +6,6 @@ import Foundation
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,6 +15,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,7 +34,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 #endif
@@ -42,7 +44,15 @@ import kotlinx.coroutines.launch
 extension View {
     public func searchable(text: Binding<String>, placement: SearchFieldPlacement = .automatic, prompt: Text? = nil) -> any View {
         #if SKIP
-        return ModifiedContent(content: self, modifier: SearchableModifier(text: text, prompt: prompt, placement: placement))
+        return ModifiedContent(content: self, modifier: SearchableModifier(text: text, prompt: prompt))
+        #else
+        return self
+        #endif
+    }
+
+    public func searchable(text: Binding<String>, isPresented: Binding<Bool>, placement: SearchFieldPlacement = .automatic, prompt: Text? = nil) -> any View {
+        #if SKIP
+        return ModifiedContent(content: self, modifier: SearchableModifier(text: text, prompt: prompt, isPresented: isPresented))
         #else
         return self
         #endif
@@ -54,8 +64,8 @@ extension View {
     }
 
     // SKIP @bridge
-    public func searchable(getText: @escaping () -> String, setText: @escaping (String) -> Void, prompt: Text?, bridgedPlacement: Int) -> any View {
-        return searchable(text: Binding(get: getText, set: setText), placement: SearchFieldPlacement(rawValue: bridgedPlacement), prompt: prompt)
+    public func searchable(getText: @escaping () -> String, setText: @escaping (String) -> Void, getIsPresented: @escaping () -> Bool, setIsPresented: @escaping (Bool) -> Void, prompt: Text?) -> any View {
+        return searchable(text: Binding(get: getText, set: setText), isPresented: Binding(get: getIsPresented, set: setIsPresented), prompt: prompt)
     }
 
     public func searchable(text: Binding<String>, placement: SearchFieldPlacement = .automatic, prompt: LocalizedStringKey) -> any View {
@@ -68,84 +78,6 @@ extension View {
 
     public func searchable(text: Binding<String>, placement: SearchFieldPlacement = .automatic, prompt: String) -> any View {
         return searchable(text: text, placement: placement, prompt: Text(verbatim: prompt))
-    }
-
-    public func searchable(text: Binding<String>, placement: SearchFieldPlacement = .automatic, prompt: Text? = nil, @ViewBuilder suggestions: () -> any View) -> any View {
-        return searchable(text: text, placement: placement, prompt: prompt).searchSuggestions(suggestions)
-    }
-
-    public func searchable(text: Binding<String>, placement: SearchFieldPlacement = .automatic, prompt: LocalizedStringKey, @ViewBuilder suggestions: () -> any View) -> any View {
-        return searchable(text: text, placement: placement, prompt: Text(prompt), suggestions: suggestions)
-    }
-
-    public func searchable(text: Binding<String>, placement: SearchFieldPlacement = .automatic, prompt: String, @ViewBuilder suggestions: () -> any View) -> any View {
-        return searchable(text: text, placement: placement, prompt: Text(verbatim: prompt), suggestions: suggestions)
-    }
-
-    /// Suggestions replace a searchable `List`'s rows while its search field is focused.
-    public func searchSuggestions(@ViewBuilder _ suggestions: () -> any View) -> any View {
-        #if SKIP
-        return environment(\._searchSuggestions, ComposeBuilder.from(suggestions), affectsEvaluate: false)
-        #else
-        return self
-        #endif
-    }
-
-    // SKIP @bridge
-    public func searchSuggestions(bridgedSuggestions: any View) -> any View {
-        return searchSuggestions { bridgedSuggestions }
-    }
-
-    // SKIP @bridge
-    public func searchSuggestions(bridgedVisibility: Int, bridgedPlacements: Int) -> any View {
-        return searchSuggestions(Visibility(rawValue: bridgedVisibility) ?? .automatic, for: SearchSuggestionsPlacement.Set(rawValue: bridgedPlacements))
-    }
-
-    public func searchSuggestions(_ visibility: Visibility, for placements: SearchSuggestionsPlacement.Set) -> any View {
-        #if SKIP
-        guard placements.contains(.content) else {
-            return self
-        }
-        return environment(\._searchSuggestionsVisibility, visibility, affectsEvaluate: false)
-        #else
-        return self
-        #endif
-    }
-
-    /// Tapping this suggestion replaces the search text with `completion` and submits the search.
-    // SKIP @bridge
-    public func searchCompletion(_ completion: String) -> any View {
-        #if SKIP
-        return ModifiedContent(content: self, modifier: SearchCompletionModifier(completion: completion))
-        #else
-        return self
-        #endif
-    }
-
-    public func searchScopes<V>(_ scope: Binding<V>, @ViewBuilder scopes: () -> any View) -> any View where V : Hashable {
-        return searchScopes(scope, activation: .automatic, scopes)
-    }
-
-    /// Bridged scopes, tagged like `Picker` options.
-    // SKIP @bridge
-    public func searchScopes(getScope: @escaping () -> Any?, setScope: @escaping (Any?) -> Void, bridgedActivation: Int, bridgedScopes: any View) -> any View {
-        #if SKIP
-        let selection = Binding<Any?>(get: getScope, set: setScope) as! Binding<Any>
-        let searchScopes = SearchScopes(selection: selection, content: ComposeBuilder.from { bridgedScopes }, activation: SearchScopeActivation(rawValue: bridgedActivation))
-        return environment(\._searchScopes, searchScopes, affectsEvaluate: false)
-        #else
-        return self
-        #endif
-    }
-
-    /// Scopes render as a segmented picker below the search field.
-    public func searchScopes<V>(_ scope: Binding<V>, activation: SearchScopeActivation, @ViewBuilder _ scopes: () -> any View) -> any View where V : Hashable {
-        #if SKIP
-        let searchScopes = SearchScopes(selection: scope as! Binding<Any>, content: ComposeBuilder.from(scopes), activation: activation)
-        return environment(\._searchScopes, searchScopes, affectsEvaluate: false)
-        #else
-        return self
-        #endif
     }
 
     @available(*, unavailable)
@@ -163,20 +95,18 @@ public struct SearchFieldPlacement : RawRepresentable {
 
     public static let automatic = SearchFieldPlacement(rawValue: 0)
 
+    @available(*, unavailable)
     public static let toolbar = SearchFieldPlacement(rawValue: 1)
 
+    @available(*, unavailable)
     public static let sidebar = SearchFieldPlacement(rawValue: 2)
 
+    @available(*, unavailable)
     public static let navigationBarDrawer = SearchFieldPlacement(rawValue: 3)
 
-    /// With `.always`, the search field stays visible instead of scrolling away with the content.
+    @available(*, unavailable)
     public static func navigationBarDrawer(displayMode: SearchFieldPlacement.NavigationBarDrawerDisplayMode) -> SearchFieldPlacement {
-        return SearchFieldPlacement(rawValue: displayMode == .always ? 4 : 3)
-    }
-
-    /// Whether the search field remains visible while content scrolls.
-    var isAlwaysVisible: Bool {
-        return rawValue == 4
+        return SearchFieldPlacement(rawValue: 4)
     }
 
     public enum NavigationBarDrawerDisplayMode {
@@ -188,36 +118,6 @@ public struct SearchFieldPlacement : RawRepresentable {
 public enum SearchToolbarBehavior: Hashable {
     case automatic
     case minimize
-}
-
-/// The ways that searchable modifiers can show or hide search scopes.
-public struct SearchScopeActivation : Equatable {
-    let rawValue: Int
-
-    /// Scopes show while searching, as on iOS.
-    public static let automatic = SearchScopeActivation(rawValue: 0)
-    public static let onTextEntry = SearchScopeActivation(rawValue: 1)
-    public static let onSearchPresentation = SearchScopeActivation(rawValue: 2)
-}
-
-/// A type that specifies how search suggestions display.
-public struct SearchSuggestionsPlacement : Equatable {
-    let rawValue: Int
-
-    public static let automatic = SearchSuggestionsPlacement(rawValue: 0)
-    public static let menu = SearchSuggestionsPlacement(rawValue: 1)
-    public static let content = SearchSuggestionsPlacement(rawValue: 2)
-
-    public struct Set : OptionSet, Equatable {
-        public let rawValue: Int
-
-        public init(rawValue: Int) {
-            self.rawValue = rawValue
-        }
-
-        public static let menu = SearchSuggestionsPlacement.Set(rawValue: 1 << 0)
-        public static let content = SearchSuggestionsPlacement.Set(rawValue: 1 << 1)
-    }
 }
 
 #if SKIP
@@ -234,6 +134,7 @@ let searchFieldHeight = 56.0
     let prompt = state.prompt ?? Text(verbatim: stringResource(android.R.string.search_go))
     let focusManager = LocalFocusManager.current
     let focusRequester = remember { FocusRequester() }
+    let isPresented = state.isPresented?.wrappedValue == true
     let contentContext = context.content()
     let keyboardOptions = KeyboardOptions(imeAction: ImeAction.Search)
     let submitState = OnSubmitState(triggers: .search) {
@@ -245,16 +146,33 @@ let searchFieldHeight = 56.0
         }
     }
     let keyboardActions = KeyboardActions(submitState)
-    let scopes = state.scopes ?? EnvironmentValues.shared._searchScopes
-    Column(modifier: context.modifier) {
-    Row(horizontalArrangement: Arrangement.spacedBy(8.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
+    let currentText = state.text.wrappedValue
+    let defaultTextFieldValue = TextFieldValue(text: currentText, selection: TextRange(currentText.count))
+    let textFieldValue = remember { mutableStateOf(defaultTextFieldValue) }
+    var currentTextFieldValue = textFieldValue.value
+    if currentTextFieldValue.text != currentText {
+        currentTextFieldValue = defaultTextFieldValue
+    }
+    LaunchedEffect(isPresented) {
+        if isPresented {
+            let presentedText = state.text.wrappedValue
+            textFieldValue.value = TextFieldValue(text: presentedText, selection: TextRange(presentedText.count))
+            state.isSearching.value = true
+            focusRequester.requestFocus()
+        } else if state.isPresented != nil {
+            focusManager.clearFocus()
+            state.isSearching.value = false
+        }
+    }
+    Row(horizontalArrangement: Arrangement.spacedBy(8.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically, modifier: context.modifier) {
         let isFocused = remember { mutableStateOf(false) }
-        OutlinedTextField(value: state.text.wrappedValue, onValueChange: {
-            state.text.wrappedValue = $0
+        OutlinedTextField(value: currentTextFieldValue, onValueChange: {
+            textFieldValue.value = $0
+            state.text.wrappedValue = $0.text
         }, modifier: Modifier.weight(Float(1.0)).semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_search_field").focusRequester(focusRequester).onFocusChanged {
-            state.isFocused.value = $0.isFocused
             if $0.isFocused {
                 state.isSearching.value = true
+                state.isPresented?.wrappedValue = true
             }
         }, placeholder: {
             TextField.Placeholder(prompt: prompt, context: contentContext)
@@ -273,50 +191,21 @@ let searchFieldHeight = 56.0
                 state.text.wrappedValue = ""
                 focusManager.clearFocus()
                 state.isSearching.value = false
+                state.isPresented?.wrappedValue = false
             }
         }
-    }
-    if let scopes {
-        AnimatedVisibility(visible: scopes.isVisible(isSearching: state.isSearching.value, text: state.text.wrappedValue)) {
-            Picker(selection: scopes.selection, content: { scopes.content }, label: { EmptyView() })
-                .pickerStyle(PickerStyle.segmented)
-                .padding(.top, 8.0)
-                .Compose(context: contentContext)
-        }
-    }
-    }
-}
-
-/// Search scopes set by `searchScopes`.
-struct SearchScopes {
-    let selection: Binding<Any>
-    let content: ComposeBuilder
-    let activation: SearchScopeActivation
-
-    func isVisible(isSearching: Bool, text: String) -> Bool {
-        return activation == .onTextEntry ? !text.isEmpty : isSearching
-    }
-}
-
-/// Marks a search suggestion that completes the search text.
-final class SearchCompletionModifier: RenderModifier {
-    let completion: String
-
-    init(completion: String) {
-        self.completion = completion
-        super.init()
     }
 }
 
 final class SearchableModifier: ModifierProtocol {
     let text: Binding<String>
     let prompt: Text?
-    let placement: SearchFieldPlacement
+    let isPresented: Binding<Bool>?
 
-    init(text: Binding<String>, prompt: Text?, placement: SearchFieldPlacement = .automatic) {
+    init(text: Binding<String>, prompt: Text?, isPresented: Binding<Bool>? = nil) {
         self.text = text
         self.prompt = prompt
-        self.placement = placement
+        self.isPresented = isPresented
     }
 
     override var role: ModifierRole {
@@ -324,8 +213,9 @@ final class SearchableModifier: ModifierProtocol {
     }
 
     @Composable override func Evaluate(content: View, context: ComposeContext, options: Int) -> kotlin.collections.List<Renderable>? {
-        let isSearching = rememberSaveable(stateSaver: context.stateSaver as! Saver<Bool, Any>) { mutableStateOf(false) }
-        let isFocused = remember { mutableStateOf(false) }
+        let isSearching = rememberSaveable(stateSaver: context.stateSaver as! Saver<Bool, Any>) {
+            mutableStateOf(isPresented?.wrappedValue == true)
+        }
         let renderables = EnvironmentValues.shared.setValuesWithReturn {
             $0.set_isSearching(isSearching)
             return ComposeResult.ok
@@ -334,7 +224,7 @@ final class SearchableModifier: ModifierProtocol {
         }
         var ret: kotlin.collections.MutableList<Renderable> = mutableListOf()
         for i in 0..<renderables.size {
-            ret.add(ModifiedContent(content: renderables[i], modifier: SearchableStateModifier(text: text, prompt: prompt, placement: placement, isSearching: isSearching, isFocused: isFocused, isFirstRenderable: i == 0)))
+            ret.add(ModifiedContent(content: renderables[i], modifier: SearchableStateModifier(text: text, prompt: prompt, isPresented: isPresented, isSearching: isSearching, isFirstRenderable: i == 0)))
         }
         return ret
     }
@@ -345,7 +235,7 @@ final class SearchableModifier: ModifierProtocol {
 }
 
 final class SearchableStateModifier: RenderModifier {
-    init(text: Binding<String>, prompt: Text?, placement: SearchFieldPlacement, isSearching: MutableState<Bool>, isFocused: MutableState<Bool>, isFirstRenderable: Bool) {
+    init(text: Binding<String>, prompt: Text?, isPresented: Binding<Bool>?, isSearching: MutableState<Bool>, isFirstRenderable: Bool) {
         super.init()
         self.action = { renderable, context in
             let submitState = EnvironmentValues.shared._onSubmitState
@@ -355,7 +245,7 @@ final class SearchableStateModifier: RenderModifier {
             // so isNavigationRoot is not yet true. Treat "modifier on NavigationStack" as on-stack
             // so only Navigation shows the search bar; ScrollView/List/etc. must not show a second one.
             let isOnNavigationStack = isModifierOnNavigationStack || isNavigationRoot
-            let state = SearchableState(text: text, prompt: prompt, submitState: submitState, isSearching: isSearching, isOnNavigationStack: isOnNavigationStack, isFocused: isFocused, isAlwaysVisible: placement.isAlwaysVisible, scopes: EnvironmentValues.shared._searchScopes)
+            let state = SearchableState(text: text, prompt: prompt, submitState: submitState, isPresented: isPresented, isSearching: isSearching, isOnNavigationStack: isOnNavigationStack)
             // Bubble the search state to the navigation stack if root, else down to the component
             if isModifierOnNavigationStack || isNavigationRoot != true {
                 EnvironmentValues.shared.setValues {
@@ -387,14 +277,9 @@ struct SearchableState: Equatable {
     let text: Binding<String>
     let prompt: Text?
     let submitState: OnSubmitState?
+    let isPresented: Binding<Bool>?
     let isSearching: MutableState<Bool>
     let isOnNavigationStack: Bool
-    /// Whether the search field has focus, which shows search suggestions.
-    let isFocused: MutableState<Bool>
-    /// Whether the search field stays visible while content scrolls.
-    let isAlwaysVisible: Bool
-    /// Scopes set outside the `searchable` modifier.
-    let scopes: SearchScopes?
 
     static func ==(lhs: SearchableState, rhs: SearchableState) -> Bool {
         // Most of this state can't be compared, and search bars handle the mutability internally
