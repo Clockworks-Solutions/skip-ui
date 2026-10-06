@@ -14,22 +14,22 @@ Keep our forks (`skip-ui`, `skip-fuse-ui`) up to date with upstream (`skiptools`
  ┌──────────────────────────────────────────────────────────────┐
  │ 2. FORK MAIN                                                 │
  │                                                              │
- │    main ──branch──► sync/upstream             			    │
- │                         ▲       ▲                       		│
- │       pending branches ─┘       └─ upstream/main        		│
+ │    main ──branch──► sync/upstream-into-main			        │
+ │                         ▲       ▲                         	│
+ │       pending branches ─┘       └─ upstream/main         	│
  │                                                              │
- │    sync/skiptools-main-<date> ──PR──► main                   │
+ │    	  sync/upstream-into-main ──PR──► main 				    │
  └──────────────────────────────┬───────────────────────────────┘
 								|
                                 ▼  (after the PR is merged)
  ┌──────────────────────────────────────────────────────────────┐
  │ 3. LIQUID-GLASS                                              │
  │                                                              │
- │    liquid-glass ──branch──► sync/main-to-liquid-glass-<date> │
+ │    liquid-glass ──branch──► sync/main-into-liquid-glass      │
  │                                  ▲                           │
  │                           main ──┘                           │
  │                                                              │
- │    sync/main-to-liquid-glass-<date> ──PR──► liquid-glass     │
+ │    sync/main-into-liquid-glass ──PR──► liquid-glass          │
  └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -48,11 +48,11 @@ Pending branches are our branches with an open PR to `skiptools`.
 
 ## Step 2: Sync fork `main`
 
-- [ ] Create `sync/upstream` from the latest `main`.
+- [ ] Create `sync/upstream-into-main` from the latest `main`.
 - [ ] Merge each pending branch from Step 1 into it.
-- [ ] Merge `upstream/upstream-to-main` into it.
+- [ ] Merge `upstream/main` into it.
 - [ ] Resolve conflicts, then build and test.
-- [ ] Open a PR: `sync/upstream-to-main` → **our fork's** `main`.
+- [ ] Open a PR: `sync/upstream-into-main` → **our fork's** `main`.
       ⚠️ GitHub defaults the base repo to `skiptools`, so change it to `Clockworks-Solutions`.
 - [ ] Merge the PR with **Create a merge commit**, not squash or rebase.
 
@@ -60,10 +60,10 @@ Pending branches are our branches with an open PR to `skiptools`.
 
 Start only after the Step 2 PR is merged.
 
-- [ ] Create `sync/main-to-liquid-glass` from the latest `liquid-glass`.
+- [ ] Create `main-into-liquid-glass` from the latest `liquid-glass`.
 - [ ] Merge `main` into it.
 - [ ] Resolve conflicts, then build and test.
-- [ ] Open a PR: `sync/main-to-liquid-glass` → `liquid-glass` (base repo `Clockworks-Solutions`).
+- [ ] Open a PR: `main-into-liquid-glass` → `liquid-glass` (base repo `Clockworks-Solutions`).
 - [ ] Merge the PR with **Create a merge commit**.
 
 ---
