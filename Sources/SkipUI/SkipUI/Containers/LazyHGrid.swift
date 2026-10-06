@@ -152,7 +152,7 @@ public struct LazyHGrid: View, Renderable {
                                 }
                             }
                         },
-                        sectionHeader: { content, _ in
+                        sectionHeader: { content in
                             for renderable in content {
                                 item(span: { GridItemSpan(maxLineSpan) }) {
                                     Box(contentAlignment: androidx.compose.ui.Alignment.Center) {
@@ -160,9 +160,8 @@ public struct LazyHGrid: View, Renderable {
                                     }
                                 }
                             }
-                            return max(1, content.size)
                         },
-                        sectionFooter: { content, _, _ in
+                        sectionFooter: { content in
                             for renderable in content {
                                 item(span: { GridItemSpan(maxLineSpan) }) {
                                     Box(contentAlignment: androidx.compose.ui.Alignment.Center) {
@@ -170,7 +169,6 @@ public struct LazyHGrid: View, Renderable {
                                     }
                                 }
                             }
-                            return max(1, content.size)
                         }
                     )
                     for renderable in renderables {

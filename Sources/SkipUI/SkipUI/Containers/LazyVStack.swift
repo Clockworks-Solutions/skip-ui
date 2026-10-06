@@ -154,21 +154,19 @@ public struct LazyVStack : View, Renderable {
                                     factory(objectsBinding, index, scopedContext).Render(context: scopedContext)
                                 }
                             },
-                            sectionHeader: { content, _ in
+                            sectionHeader: { content in
                                 for renderable in content {
                                     item {
                                         renderable.Render(context: context.content(scope: self))
                                     }
                                 }
-                                return max(1, content.size)
                             },
-                            sectionFooter: { content, _, _ in
+                            sectionFooter: { content in
                                 for renderable in content {
                                     item {
                                         renderable.Render(context: context.content(scope: self))
                                     }
                                 }
-                                return max(1, content.size)
                             }
                         )
                         if isSearchable {

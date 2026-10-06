@@ -18,17 +18,15 @@ struct KeyboardDismissingNestedScrollConnection: NestedScrollConnection {
     let focusManager: State<FocusManager?>
     let imeInsets: WindowInsets
     let density: Density
-    let isUserScrollActive: State<Bool>
 
     override func onPreScroll(available: Offset, source: NestedScrollSource) -> Offset {
-        guard source == NestedScrollSource.Drag,
-              imeInsets.getBottom(density) > 0,
-              isUserScrollActive.value else {
-            return Offset.Zero
+        if source == NestedScrollSource.Drag {
+            let keyboardIsVisible = imeInsets.getBottom(density) > 0
+            if keyboardIsVisible {
+                keyboardController.value?.hide()
+                focusManager.value?.clearFocus()
+            }
         }
-
-        keyboardController.value?.hide()
-        focusManager.value?.clearFocus()
         return Offset.Zero
     }
 }

@@ -19,6 +19,10 @@ public final class ForEach : View, Renderable, LazyItemFactory {
     let editActions: EditActions
     var onDeleteAction: ((IndexSet) -> Void)?
     var onMoveAction: ((IndexSet, Int) -> Void)?
+    #if SKIP
+    /// Set by `dropDestination(for:action:)`.
+    var dropAction: ForEachDropAction?
+    #endif
 
     init(identifier: ((Any) -> AnyHashable?)? = nil, indexRange: (() -> Range<Int>)? = nil, indexedContent: ((Int) -> any View)? = nil, objects: (any RandomAccessCollection<Any>)? = nil, objectContent: ((Any) -> any View)? = nil, objectsBinding: Binding<any RandomAccessCollection<Any>>? = nil, objectsBindingContent: ((Binding<any RandomAccessCollection<Any>>, Int) -> any View)? = nil, editActions: EditActions = []) {
         self.identifier = identifier
@@ -206,12 +210,9 @@ public final class ForEach : View, Renderable, LazyItemFactory {
             return true
         }
         // We have to unroll if the ForEach body contains multiple views. We also unroll if this is
-        // e.g. a ForEach of Sections which each append lazy items. A DisclosureGroup can also
-        // append lazy child items when expanded, even when it is currently collapsed to one row.
-        let firstRenderable = renderables.firstOrNull()
-        return renderables.size > 1
-            || (firstRenderable as? LazyItemFactory)?.shouldProduceLazyItems() == true
-            || firstRenderable?.strip() is DisclosureGroup
+        // e.g. a ForEach of Sections which each append lazy items
+        // A DisclosureGroup expands into multiple rows, so it also requires unrolling
+        return renderables.size > 1 || (renderables.firstOrNull() as? LazyItemFactory)?.shouldProduceLazyItems() == true || renderables.firstOrNull()?.strip() is DisclosureGroup
     }
 
     override func produceLazyItems(collector: LazyItemCollector, modifiers: kotlin.collections.List<ModifierProtocol>, level: Int) {
@@ -225,7 +226,8 @@ public final class ForEach : View, Renderable, LazyItemFactory {
                 } else {
                     tag = index
                 }
-                return taggedRenderable(for: renderable, defaultTag: tag)
+                let tagged = taggedRenderable(for: renderable, defaultTag: tag)
+                return dropAction?.applied(to: tagged, index: index - indexRange!().start) ?? tagged
             }
             collector.indexedItems(indexRange(), identifier, onDeleteAction, onMoveAction, level, factory)
         } else if let objects {
@@ -235,7 +237,12 @@ public final class ForEach : View, Renderable, LazyItemFactory {
                 guard let tag = identifier!(object) else {
                     return renderable
                 }
-                return taggedRenderable(for: renderable, defaultTag: tag)
+                let tagged = taggedRenderable(for: renderable, defaultTag: tag)
+                guard let dropAction else {
+                    return tagged
+                }
+                let index = objects.firstIndex { identifier!($0) == tag } ?? 0
+                return dropAction.applied(to: tagged, index: index)
             }
             collector.objectItems(objects, identifier!, onDeleteAction, onMoveAction, level, factory)
         } else if let objectsBinding {
@@ -245,7 +252,8 @@ public final class ForEach : View, Renderable, LazyItemFactory {
                 guard let tag = identifier!(objects.wrappedValue[index]) else {
                     return renderable
                 }
-                return taggedRenderable(for: renderable, defaultTag: tag)
+                let tagged = taggedRenderable(for: renderable, defaultTag: tag)
+                return dropAction?.applied(to: tagged, index: index) ?? tagged
             }
             collector.objectBindingItems(objectsBinding, identifier!, editActions, onDeleteAction, onMoveAction, level, factory)
         }
@@ -297,7 +305,7 @@ final class ForEachIdentityModifier: RenderModifier {
         self.namespace = namespace
         self.identity = identity
         super.init(action: { renderable, context in
-            androidx.compose.runtime.key(identity) {
+            androidx.compose.runtime.key(namespace, identity) {
                 renderable.Render(context: context)
             }
         })
