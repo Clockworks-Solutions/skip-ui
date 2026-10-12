@@ -47,19 +47,12 @@ private fun measureAll(measurables: List<Measurable>): Triple<List<Placeable>, I
 internal fun LiquidGlassBarItemContent(modifier: Modifier = Modifier, maxHeight: Dp = Dp.Unspecified, content: @Composable () -> Unit) {
     Layout(content = content, modifier = modifier) { measurables, constraints ->
         val limitHeight = if (maxHeight.isSpecified) min(constraints.maxHeight, maxHeight.roundToPx()) else constraints.maxHeight
-        val measureHeight = if (maxHeight.isSpecified) Constraints.Infinity else limitHeight
-        val (placeables, measuredWidth, measuredHeight) = measureAll(measurables, Constraints(maxWidth = constraints.maxWidth, maxHeight = measureHeight))
-        val scale = fitScale(measuredWidth, measuredHeight, constraints.maxWidth, limitHeight)
-        val width = (measuredWidth * scale).roundToInt().coerceIn(constraints.minWidth, constraints.maxWidth)
-        val height = (measuredHeight * scale).roundToInt().coerceIn(constraints.minHeight, constraints.maxHeight)
+        val placeables = measurables.map { it.measure(Constraints(maxHeight = limitHeight)) }
+        val width = (placeables.maxOfOrNull { it.measuredWidth } ?: 0).coerceIn(constraints.minWidth, constraints.maxWidth)
+        val height = (placeables.maxOfOrNull { it.measuredHeight } ?: 0).coerceIn(min(constraints.minHeight, limitHeight), limitHeight)
         layout(width, height) {
-            // Compose centers an oversized placeable on its box, and the layer scales about its center
-            placeables.forEach {
-                it.placeWithLayer((width - it.width) / 2, (height - it.height) / 2) {
-                    scaleX = scale
-                    scaleY = scale
-                }
-            }
+            // Compose centers a frame larger than the proposal on the proposed box
+            placeables.forEach { it.place((width - it.width) / 2, (height - it.height) / 2) }
         }
     }
 }
@@ -93,7 +86,7 @@ internal fun WithGlassTabIconPart(part: GlassTabIconPart, content: @Composable (
  * A tab icon at its own size, centered on its slot as iOS draws it, with an optional badge at its top trailing corner.
  * An icon larger than the slot overflows it rather than growing the bar.
  *
- * @param slotSize The icon's square, or `null` for the incoming constraints.
+ * @param slotSize The icon's square, or `null` for the icon's own size.
  * @param symbolScale 1.5 for SF Symbols, whose Material stand-ins draw small; 1 for images, drawn at their own size.
  * @param badge The badge label, if any.
  */
@@ -117,11 +110,7 @@ internal fun LiquidGlassTabIcon(
         }
     ) { measurables, constraints ->
         val slotPx = slotSize?.roundToPx()
-        val maxWidth = slotPx?.let { min(it, constraints.maxWidth) } ?: constraints.maxWidth
-        val maxHeight = slotPx?.let { min(it, constraints.maxHeight) } ?: constraints.maxHeight
-        // Unbounded in height, so a framed icon in a wrapper still measures at its frame
-        val (icons, iconWidth, iconHeight) = measureAll(if (showsBadge) measurables.dropLast(1) else measurables, Constraints(maxWidth = maxWidth))
-        val scale = symbolScale * fitScale((iconWidth * symbolScale).roundToInt(), (iconHeight * symbolScale).roundToInt(), maxWidth, maxHeight)
+        val (icons, iconWidth, iconHeight) = measureAll(if (showsBadge) measurables.dropLast(1) else measurables)
         val scale = symbolScale
         val width = (slotPx ?: (iconWidth * scale).roundToInt()).coerceIn(constraints.minWidth, constraints.maxWidth)
         val height = (slotPx ?: (iconHeight * scale).roundToInt()).coerceIn(constraints.minHeight, constraints.maxHeight)

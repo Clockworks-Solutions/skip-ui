@@ -25,8 +25,8 @@ internal val liquidGlassToolbarHeight = 48.dp
 /** A capsule's height in the top bar. */
 internal val liquidGlassTopToolbarHeight = 40.dp
 
-/** The space kept above and below an icon in a capsule; a taller icon is scaled to fit. */
-internal val liquidGlassToolbarIconInset = 8.dp
+/** The height a capsule proposes to each item, as iOS proposes 22pt to a toolbar image; a taller item overflows it. */
+internal val liquidGlassToolbarItemHeight = 22.dp
 
 /** The gap a bottom toolbar keeps above the tab bar or screen edge. */
 internal val liquidGlassToolbarGap = 8.dp
