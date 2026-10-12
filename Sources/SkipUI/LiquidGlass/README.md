@@ -27,7 +27,7 @@ Items follow iOS 26's automatic glass:
 - `.glassProminent` and `.borderedProminent` items are capsules of their own.
 - `.principal` content is never on glass, buttons included.
 - `.confirmationAction` sits last on the trailing side.
-- Images taller than the capsule are scaled to fit; the bar never grows.
+- Items are proposed 22dp of height, as on iOS: a resizable image fits it, an image of fixed size or a frame keeps its own size, and anything taller overflows; the bar never grows.
 - Buttons outside a toolbar are glass only when styled `.glass` or `.glassProminent`.
 
 ## Skip Fuse bridging
@@ -53,10 +53,11 @@ that name the fork file to read, so an upstream merge conflicts only where the f
 | `Controls/Button.swift` | Routes `.glass` and `.glassProminent` to the fork. |
 | `Graphics/Glass.swift` | Routes `glassEffect` to the fork. |
 | `Environment/EnvironmentValues.swift` | Bridges `liquidGlass`. |
-| `Containers/TabView.swift` | Bar state, the glass bar, icon fitting and badges, minimize behaviors. |
+| `Containers/TabView.swift` | Bar state, the glass bar, icons drawn as on iOS and badges, minimize behaviors. |
 | `Containers/Navigation.swift` | Glass back button, toolbar capsules, the toolbar backdrop and floating bottom bar. |
 | `Commands/Toolbar.swift` | `.confirmationAction` last on the trailing side. |
-| `Containers/ZStack.swift`, `Compose/ComposeLayouts.swift`, `View/AdditionalViewModifiers.swift` | Record the view behind glass. |
+| `Containers/ZStack.swift`, `Compose/ComposeLayouts.swift`, `View/AdditionalViewModifiers.swift` | Record the view behind glass; a tab bar image ignores `scaleEffect`. |
+| `Components/Image.swift` | A tab bar image ignores `resizable()`. |
 | `Layout/SafeArea.swift` | Bottom inset placement and recording. |
 | `Layout/Presentation.swift` | Sheets and covers start without the presenter's glass state. |
 | `Containers/List.swift`, `Containers/ScrollView.swift` | Content clears the floating chrome. |
