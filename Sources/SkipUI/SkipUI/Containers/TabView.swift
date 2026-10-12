@@ -939,7 +939,7 @@ public struct Tab : TabContent, Renderable {
                 renderImage()
             }
         }
-        RenderLiquidGlassTabIcon(stripped, slotSize: slotDp, badge: badge, context: context, icon: renderIcon) // Liquid Glass: icons kept inside their slot and badged as on iOS, see TabView+LiquidGlass.swift
+        RenderLiquidGlassTabIcon(stripped, slotSize: slotDp, badge: badge, context: context, icon: renderIcon) // Liquid Glass: icons drawn and badged as on iOS, see TabView+LiquidGlass.swift
     }
     #else
     public var body: some View {

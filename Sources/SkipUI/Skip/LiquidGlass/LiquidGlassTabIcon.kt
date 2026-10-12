@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 //
-// Liquid Glass: icons held inside their tab or toolbar slot, and iOS 26 tab badges.
+// Liquid Glass: tab and toolbar icons at their own size, as iOS draws them, and iOS 26 tab badges.
 package skip.ui.liquidglass
 
 import androidx.compose.foundation.background
@@ -31,30 +31,20 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-// MARK: - Fitting
+// MARK: - Bar items
 
-/** The scale, at most 1, that fits [width]×[height] inside the bounds; `Constraints.Infinity` is unbounded. */
-private fun fitScale(width: Int, height: Int, maxWidth: Int, maxHeight: Int): Float {
-    fun ratio(size: Int, max: Int) = if (max != Constraints.Infinity && size > max) max.toFloat() / size else 1f
-    return min(ratio(width, maxWidth), ratio(height, maxHeight))
-}
-
-/** Measures all children alike and returns them with their largest measured (not constrained) size. */
-private fun measureAll(measurables: List<Measurable>, constraints: Constraints): Triple<List<Placeable>, Int, Int> {
-    val placeables = measurables.map { it.measure(constraints) }
-    return Triple(placeables, placeables.maxOfOrNull { it.measuredWidth } ?: 0, placeables.maxOfOrNull { it.measuredHeight } ?: 0)
+/** Measures all children with no size proposed, as a tab bar draws an icon at its own size, and returns the largest. */
+private fun measureAll(measurables: List<Measurable>): Triple<List<Placeable>, Int, Int> {
+    val placeables = measurables.map { it.measure(Constraints()) }
+    return Triple(placeables, placeables.maxOfOrNull { it.width } ?: 0, placeables.maxOfOrNull { it.height } ?: 0)
 }
 
 /**
- * Lays content out at its own size, scaling it down to fit when it outgrows its bounds, as iOS keeps an icon from
- * growing a toolbar.
- *
- * `frame(width:height:)` uses required sizes that ignore their slot. With [maxHeight], content is measured unbounded in
- * height so its true size shows through any wrapper, then scaled to fit; without it, it is scaled only if it measures
- * larger than the incoming constraints.
+ * Lays a toolbar item out as iOS does: proposed [maxHeight] and any width, so a resizable image fits that height while
+ * an image of fixed size or a frame keeps its own. The item never grows the bar; anything larger overflows, centered.
  */
 @Composable
-internal fun LiquidGlassFitContent(modifier: Modifier = Modifier, maxHeight: Dp = Dp.Unspecified, content: @Composable () -> Unit) {
+internal fun LiquidGlassBarItemContent(modifier: Modifier = Modifier, maxHeight: Dp = Dp.Unspecified, content: @Composable () -> Unit) {
     Layout(content = content, modifier = modifier) { measurables, constraints ->
         val limitHeight = if (maxHeight.isSpecified) min(constraints.maxHeight, maxHeight.roundToPx()) else constraints.maxHeight
         val measureHeight = if (maxHeight.isSpecified) Constraints.Infinity else limitHeight
@@ -100,7 +90,8 @@ internal fun WithGlassTabIconPart(part: GlassTabIconPart, content: @Composable (
     CompositionLocalProvider(LocalGlassTabIconPart provides part, content = content)
 
 /**
- * A tab icon held inside its slot, with an optional badge at its top trailing corner.
+ * A tab icon at its own size, centered on its slot as iOS draws it, with an optional badge at its top trailing corner.
+ * An icon larger than the slot overflows it rather than growing the bar.
  *
  * @param slotSize The icon's square, or `null` for the incoming constraints.
  * @param symbolScale 1.5 for SF Symbols, whose Material stand-ins draw small; 1 for images, drawn at their own size.
@@ -131,6 +122,7 @@ internal fun LiquidGlassTabIcon(
         // Unbounded in height, so a framed icon in a wrapper still measures at its frame
         val (icons, iconWidth, iconHeight) = measureAll(if (showsBadge) measurables.dropLast(1) else measurables, Constraints(maxWidth = maxWidth))
         val scale = symbolScale * fitScale((iconWidth * symbolScale).roundToInt(), (iconHeight * symbolScale).roundToInt(), maxWidth, maxHeight)
+        val scale = symbolScale
         val width = (slotPx ?: (iconWidth * scale).roundToInt()).coerceIn(constraints.minWidth, constraints.maxWidth)
         val height = (slotPx ?: (iconHeight * scale).roundToInt()).coerceIn(constraints.minHeight, constraints.maxHeight)
         val badgePlaceable = if (showsBadge) measurables.last().measure(Constraints()) else null

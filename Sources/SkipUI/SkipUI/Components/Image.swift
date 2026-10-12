@@ -117,6 +117,12 @@ public struct Image : View, Renderable, Equatable {
     }
 
     @Composable override func Render(context: ComposeContext) {
+        if resizingMode != nil && isLiquidGlassTabBarImage() { // Clockworks fork: a tab bar draws an image at its own size, see TabView+LiquidGlass.swift
+            var image = self
+            image.resizingMode = nil
+            image.Render(context: context)
+            return
+        }
         let aspect = EnvironmentValues.shared._aspectRatio
         let colorScheme = EnvironmentValues.shared.colorScheme
 

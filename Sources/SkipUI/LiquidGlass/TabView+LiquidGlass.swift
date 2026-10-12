@@ -166,7 +166,8 @@ import skip.ui.liquidglass.__
 
 // MARK: - Tab icon
 
-/// Renders a tab's icon held inside its slot, with an iOS-style badge, for the glass and Material bars alike.
+/// Renders a tab's icon as iOS draws a tab bar image, at the image's own size, with an iOS-style badge, for the glass and
+/// Material bars alike.
 ///
 /// SF Symbols are enlarged by half, as their Material stand-ins draw small; other images draw at their own size.
 ///
@@ -176,7 +177,33 @@ import skip.ui.liquidglass.__
 @Composable func RenderLiquidGlassTabIcon(_ label: Any, slotSize: Dp?, badge: Text?, context: ComposeContext, icon: @Composable () -> Void) {
     let renderBadge: (@Composable () -> Void)? = badge == nil ? nil : { badge!.foregroundStyle(Color.white).Render(context: context) }
     let symbolScale = isSystemSymbolTabIcon(label, context: context) ? Float(1.5) : Float(1.0)
-    LiquidGlassTabIcon(modifier: context.modifier, slotSize: slotSize, symbolScale: symbolScale, badge: renderBadge, icon: icon)
+    LiquidGlassTabIcon(modifier: context.modifier, slotSize: slotSize, symbolScale: symbolScale, badge: renderBadge) {
+        EnvironmentValues.shared.setValues {
+            // As iOS draws a tab's image: at the image's own size, whatever its resizing, frame, or scale effect
+            $0.set_isLiquidGlassTabBarImage(true)
+            // An icon's fill request would otherwise reach the container around the TabView and collapse the TabView
+            // to its content; the Material bar's item stops it the same way
+            $0.set_flexibleWidth(nil)
+            $0.set_flexibleHeight(nil)
+            return ComposeResult.ok
+        } in: {
+            icon()
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// Whether images here are a tab's icon, drawn as iOS draws a tab bar image.
+    var _isLiquidGlassTabBarImage: Bool {
+        get { builtinValue(key: "_isLiquidGlassTabBarImage", defaultValue: { false }) as! Bool }
+        set { setBuiltinValue(key: "_isLiquidGlassTabBarImage", value: newValue, defaultValue: { false }) }
+    }
+}
+
+/// Whether an image here is a tab's icon, which iOS draws at the image's own size: `resizable()`, `scaledToFit()`, and
+/// `scaleEffect(_:)` do not apply, and a frame does not resize it.
+@Composable func isLiquidGlassTabBarImage() -> Bool {
+    return EnvironmentValues.shared._isLiquidGlassTabBarImage
 }
 
 /// Whether a tab label's icon is an SF Symbol.

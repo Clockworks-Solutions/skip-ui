@@ -117,8 +117,8 @@ extension Button {
                 contentPadding: options.contentPadding,
                 interactionSource: options.interactionSource
             ) {
-                // An oversized label is scaled to fit the capsule, or the toolbar it is on
-                LiquidGlassFitContent(maxHeight: liquidGlassToolbarItemMaxHeight()) {
+                // The label takes its own size, as on iOS, and an oversized one overflows rather than growing the toolbar
+                LiquidGlassBarItemContent(maxHeight: liquidGlassToolbarItemMaxHeight()) {
                     label.Compose(context: contentContext)
                 }
             }

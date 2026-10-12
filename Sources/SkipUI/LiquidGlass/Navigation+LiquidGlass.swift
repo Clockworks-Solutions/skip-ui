@@ -164,15 +164,15 @@ func liquidGlassButtonStyleDrawsOwnBackground(_ style: Any) -> Bool {
 
 // MARK: - Rendering
 
-/// Renders one group on its surface. Anything taller than the room inside is scaled to fit, as iOS keeps a toolbar at
-/// its height.
+/// Renders one group on its surface. Items take their own size, as on iOS, and anything taller than the room inside
+/// overflows rather than growing the toolbar.
 @Composable func RenderLiquidGlassToolbarGroup(group: LiquidGlassToolbarItemGroup, height: Dp, context: ComposeContext) {
-    let maxItemHeight = height - liquidGlassToolbarIconInset - liquidGlassToolbarIconInset
+    let maxItemHeight = liquidGlassToolbarItemHeight
     switch group.surface {
     case .capsule:
         LiquidGlassToolbarGroup(height: height) {
             for renderable in group.items {
-                LiquidGlassFitContent(maxHeight: maxItemHeight) {
+                LiquidGlassBarItemContent(maxHeight: maxItemHeight) {
                     renderable.Render(context: context)
                 }
             }
@@ -187,7 +187,7 @@ func liquidGlassButtonStyleDrawsOwnBackground(_ style: Any) -> Bool {
         }
     case .plain:
         for renderable in group.items {
-            LiquidGlassFitContent(maxHeight: height) {
+            LiquidGlassBarItemContent(maxHeight: height) {
                 renderable.Render(context: context)
             }
         }
