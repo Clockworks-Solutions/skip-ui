@@ -57,6 +57,7 @@ that name the fork file to read, so an upstream merge conflicts only where the f
 | `Containers/Navigation.swift` | Glass back button, toolbar capsules, the toolbar backdrop and floating bottom bar. |
 | `Commands/Toolbar.swift` | `.confirmationAction` last on the trailing side. |
 | `Containers/ZStack.swift`, `Compose/ComposeLayouts.swift`, `View/AdditionalViewModifiers.swift` | Record the view behind glass. |
+| `Components/Image.swift` | A tab's asset image fits the bar's icon size, or its own frame; an asset image's modifiers apply once, not twice. |
 | `Layout/SafeArea.swift` | Bottom inset placement and recording. |
 | `Layout/Presentation.swift` | Sheets and covers start without the presenter's glass state. |
 | `Containers/List.swift`, `Containers/ScrollView.swift` | Content clears the floating chrome. |

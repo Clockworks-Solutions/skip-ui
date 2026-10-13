@@ -100,10 +100,10 @@ internal fun WithGlassTabIconPart(part: GlassTabIconPart, content: @Composable (
     CompositionLocalProvider(LocalGlassTabIconPart provides part, content = content)
 
 /**
- * A tab icon held inside its slot, with an optional badge at its top trailing corner.
+ * A tab icon filling its slot, or in its own frame if it has one, with an optional badge at its top trailing corner.
  *
  * @param slotSize The icon's square, or `null` for the incoming constraints.
- * @param symbolScale 1.5 for SF Symbols, whose Material stand-ins draw small; 1 for images, drawn at their own size.
+ * @param symbolScale 1.5 for SF Symbols, whose Material stand-ins draw small; 1 for images.
  * @param badge The badge label, if any.
  */
 @Composable
@@ -128,9 +128,9 @@ internal fun LiquidGlassTabIcon(
         val slotPx = slotSize?.roundToPx()
         val maxWidth = slotPx?.let { min(it, constraints.maxWidth) } ?: constraints.maxWidth
         val maxHeight = slotPx?.let { min(it, constraints.maxHeight) } ?: constraints.maxHeight
-        // Unbounded in height, so a framed icon in a wrapper still measures at its frame
-        val (icons, iconWidth, iconHeight) = measureAll(if (showsBadge) measurables.dropLast(1) else measurables, Constraints(maxWidth = maxWidth))
-        val scale = symbolScale * fitScale((iconWidth * symbolScale).roundToInt(), (iconHeight * symbolScale).roundToInt(), maxWidth, maxHeight)
+        // Offered the slot, which an image fills; an icon with a frame measures at its frame and keeps it
+        val (icons, iconWidth, iconHeight) = measureAll(if (showsBadge) measurables.dropLast(1) else measurables, Constraints(maxWidth = maxWidth, maxHeight = maxHeight))
+        val scale = symbolScale
         val width = (slotPx ?: (iconWidth * scale).roundToInt()).coerceIn(constraints.minWidth, constraints.maxWidth)
         val height = (slotPx ?: (iconHeight * scale).roundToInt()).coerceIn(constraints.minHeight, constraints.maxHeight)
         val badgePlaceable = if (showsBadge) measurables.last().measure(Constraints()) else null

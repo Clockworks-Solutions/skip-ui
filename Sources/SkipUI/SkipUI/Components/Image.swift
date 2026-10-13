@@ -139,7 +139,8 @@ public struct Image : View, Renderable, Equatable {
 
     @Composable private func RenderNamedImage(name: String, bundle: Bundle?, label: Text?, aspectRatio: Double?, contentMode: ContentMode?, colorScheme: ColorScheme, context: ComposeContext) {
         if let assetImageInfo = rememberCachedAsset(assetImageCache, AssetKey(name: name, bundle: bundle, colorScheme: colorScheme)) { _ in assetImageInfo(name: name, colorScheme: colorScheme, bundle: bundle ?? Bundle.main) } {
-            RenderAssetImage(asset: assetImageInfo, label: label, aspectRatio: aspectRatio, contentMode: contentMode, context: context)
+            let fitsTab = EnvironmentValues.shared._isLiquidGlassTabImage // Liquid Glass: a tab's image fits the bar's icon size, or its own frame, see TabView+LiquidGlass.swift
+            (fitsTab ? resizable() : self).RenderAssetImage(asset: assetImageInfo, label: label, aspectRatio: aspectRatio, contentMode: fitsTab ? contentMode ?? .fit : contentMode, context: context)
         } else if let symbolResourceURL = rememberCachedAsset(contentsCache, AssetKey(name: name, bundle: bundle)) { _ in symbolResourceURL(name: name, bundle: bundle ?? Bundle.main) } {
             RenderSymbolImage(name: name, url: symbolResourceURL, label: label, aspectRatio: aspectRatio, contentMode: contentMode, context: context)
         }
@@ -202,7 +203,7 @@ public struct Image : View, Renderable, Equatable {
         let painter = rememberAsyncImagePainter(model: model, contentScale: ContentScale.Fit)
 
         let innerContext = context.content()
-        Box(modifier: context.modifier.then(sizeResolver), contentAlignment: androidx.compose.ui.Alignment.Center) {
+        Box(modifier: Modifier.then(sizeResolver), contentAlignment: androidx.compose.ui.Alignment.Center) { // Clockworks fork: Render's Box already applies context.modifier; here too, it doubled scale effects and padding
             let hasValidIntrinsic = !painter.intrinsicSize.isUnspecified && !painter.intrinsicSize.width.isNaN() && painter.intrinsicSize.width > 0 && !painter.intrinsicSize.height.isNaN() && painter.intrinsicSize.height > 0
             if hasValidIntrinsic {
                 RenderPainter(painter: painter, tintColor: tintColor, scale: scale, aspectRatio: aspectRatio, contentMode: contentMode, context: innerContext)
