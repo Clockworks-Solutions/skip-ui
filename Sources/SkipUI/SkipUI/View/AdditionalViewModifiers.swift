@@ -1356,7 +1356,6 @@ extension View {
         #if SKIP
         let animTx = StateTracking.captureLastReadAndClear()
         return ModifiedContent(content: self, modifier: RenderModifier { context in
-            guard !isLiquidGlassTabBarImage() else { return context.modifier } // Clockworks fork: a tab bar draws an image at its own size, see TabView+LiquidGlass.swift
             let animatable = (Float(x), Float(y)).asAnimatable(context: context, animTx: animTx)
             return context.modifier.graphicsLayer(
                 transformOrigin: TransformOrigin(pivotFractionX: Float(anchor.x), pivotFractionY: Float(anchor.y)),
