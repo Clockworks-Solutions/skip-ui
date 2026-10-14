@@ -32,8 +32,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -43,10 +41,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
@@ -146,11 +142,13 @@ internal fun LiquidGlassTabView(
         // Above the system bar, or the outer bar's footprint when nested
         val bottomInset = LocalGlassTabBarInset.current.takeIf { it > 0.dp } ?: systemBottomInset
 
-        LiquidGlassTabBarEdgeEffect(
+        LiquidGlassEdgeEffect(
             backdrop = state.backdrop,
-            height = { bottomInset + 2.dp + barHeight(minimizeProgress()) + liquidGlassTabBarEdgeFade },
-            minimizeProgress = minimizeProgress,
-            modifier = Modifier.fillMaxWidth().wrapContentHeight(align = Alignment.Bottom, unbounded = true)
+            edge = Alignment.Bottom,
+            height = { bottomInset + 2.dp + barHeight(minimizeProgress()) + liquidGlassEdgeFade },
+            modifier = Modifier.fillMaxWidth().wrapContentHeight(align = Alignment.Bottom, unbounded = true),
+            // Fades out as the bar minimizes
+            alpha = remember(minimizeProgress) { { 1f - minimizeProgress() } }
         )
         BoxWithConstraints(
             modifier = Modifier
@@ -193,32 +191,6 @@ internal fun LiquidGlassTabView(
             )
         }
     }
-}
-
-/**
- * The strip the bar floats on, blurring the content toward the screen's bottom edge as iOS does, so the bar sits on the
- * content rather than being cut out of it. Fades out as the bar minimizes.
- */
-@Composable
-private fun LiquidGlassTabBarEdgeEffect(backdrop: Backdrop, height: () -> Dp, minimizeProgress: () -> Float, modifier: Modifier = Modifier) {
-    val isHidden by remember { derivedStateOf { minimizeProgress() >= 1f } }
-    if (isHidden) return
-    // Starts low and never fully replaces the sharp content, so rows beside the bar stay readable
-    val mask = remember { Brush.verticalGradient(0f to Color.Transparent, 0.6f to Color.Black.copy(alpha = 0.25f), 1f to Color.Black.copy(alpha = 0.85f)) }
-    Box(
-        modifier = modifier
-            .animatedHeight(height)
-            .graphicsLayer {
-                alpha = 1f - minimizeProgress()
-                // Its own layer, so the gradient masks the blurred copy rather than the screen
-                compositingStrategy = CompositingStrategy.Offscreen
-            }
-            .drawWithContent {
-                drawContent()
-                drawRect(brush = mask, blendMode = BlendMode.DstIn)
-            }
-            .drawBackdrop(backdrop = backdrop, shape = { RectangleShape }, effects = { blur(4f.dp.toPx()) })
-    )
 }
 
 /**
@@ -530,13 +502,6 @@ private fun Modifier.accentTint(color: Color, amount: () -> Float, alpha: () -> 
         val tint = amount()
         if (tint > 0f) drawRect(color, alpha = tint, blendMode = BlendMode.SrcAtop)
     }
-
-/** A fixed height read while laying out, so an animated height relayouts without recomposing. */
-private fun Modifier.animatedHeight(height: () -> Dp): Modifier = layout { measurable, constraints ->
-    val heightPx = height().roundToPx().coerceAtLeast(0)
-    val placeable = measurable.measure(constraints.copy(minHeight = heightPx, maxHeight = heightPx))
-    layout(placeable.width, heightPx) { placeable.place(0, 0) }
-}
 
 /** The [Dp] [fraction] of the way from [start] to [end]. */
 private fun lerp(start: Dp, end: Dp, fraction: Float): Dp = start + (end - start) * fraction
