@@ -189,7 +189,7 @@ public final class List : View, Renderable {
         var ignoresSafeAreaEdges: Edge.Set = [.top, .bottom]
         ignoresSafeAreaEdges.formIntersection(safeArea?.absoluteSystemBarEdges ?? [])
         ComposeContainer(scrollAxes: .vertical, modifier: context.modifier, fillWidth: true, fillHeight: true, then: Modifier.background(BackgroundColor(styling: styling, isItem: false))) { modifier in
-            IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges, checkEdges: [.bottom], modifier: modifier, logTag: "List") { safeAreaExpansion, safeAreaEdges in
+            IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges.union(liquidGlassScrollUnderEdges()), checkEdges: Edge.Set.bottom.union(liquidGlassScrollUnderEdges()), modifier: modifier, logTag: "List") { safeAreaExpansion, safeAreaEdges in // Liquid Glass: runs beneath a glass top bar from the first frame, see Navigation+LiquidGlass.swift
                 var containerModifier: Modifier
                 let refreshing = remember { mutableStateOf(false) }
                 let refreshAction = EnvironmentValues.shared.refresh
@@ -217,7 +217,7 @@ public final class List : View, Renderable {
                     let footerSafeAreaHeight = with(density) { safeAreaExpansion.bottom.toDp() } + liquidGlassScrollContentInset() // Liquid Glass: the last row can be scrolled clear of the floating glass chrome, see TabView+LiquidGlass.swift
                     RenderList(context: itemContext, styling: styling, arguments: ListArguments(headerSafeAreaHeight: headerSafeAreaHeight, footerSafeAreaHeight: footerSafeAreaHeight, safeAreaEdges: safeAreaEdges))
                     if let refreshState {
-                        PullRefreshIndicator(refreshing.value, refreshState, Modifier.align(androidx.compose.ui.Alignment.TopCenter))
+                        PullRefreshIndicator(refreshing.value, refreshState, Modifier.align(androidx.compose.ui.Alignment.TopCenter).padding(top: headerSafeAreaHeight)) // Liquid Glass: below any bar the list runs beneath
                     }
                 }
             }

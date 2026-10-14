@@ -125,6 +125,17 @@ internal fun WithGlassContentInset(inset: Dp, content: @Composable () -> Unit) =
     CompositionLocalProvider(LocalGlassContentInset provides inset, content = content)
 
 /**
+ * Whether this navigation content sits under a glass navigation bar. A scrollable at its top then runs up beneath the bar,
+ * clearing it with a header, as on iOS; other content stays below the bar.
+ */
+internal val LocalGlassTopBarUnderlay = compositionLocalOf { false }
+
+/** Provides [LocalGlassTopBarUnderlay], replacing the one from an enclosing `NavigationStack`. */
+@Composable
+internal fun WithGlassTopBarUnderlay(isUnderlaid: Boolean, content: @Composable () -> Unit) =
+    CompositionLocalProvider(LocalGlassTopBarUnderlay provides isUnderlaid, content = content)
+
+/**
  * Starts a sheet or cover with none of the presenting screen's glass state. iOS presents in a fresh window; without
  * this, Compose would hand on the outer bar's insets and backdrop, and a presented `TabView` would float its bar as if
  * nested.
@@ -135,6 +146,7 @@ internal fun WithoutGlassChrome(content: @Composable () -> Unit) =
         LocalGlassTabBarInset provides 0.dp,
         LocalGlassContentInset provides 0.dp,
         LocalGlassOuterBottomInset provides 0.dp,
+        LocalGlassTopBarUnderlay provides false,
         LocalGlassBackdrop provides null,
         LocalGlassBackdropRequest provides null,
         LocalGlassToolbarCapsule provides false,

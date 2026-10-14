@@ -17,17 +17,31 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -36,7 +50,8 @@ import skip.ui.liquidglass.__
 
 // MARK: - Back button
 
-/// The back button as glass; the Material `FilledIconButton` (prominent) or `IconButton` on the `NATIVE` tier.
+/// The back button as a glass circle with a chevron, as on iOS 26; the Material `FilledIconButton` (prominent) or
+/// `IconButton` on the `NATIVE` tier.
 @Composable func LiquidGlassNavigationBackButton(isProminent: Bool, colors: IconButtonColors?, onClick: () -> Void, icon: @Composable () -> Void) {
     guard isLiquidGlassToolbarEnabled() else {
         if isProminent {
@@ -47,12 +62,16 @@ import skip.ui.liquidglass.__
         return
     }
     LiquidGlassButton(
-        modifier: Modifier.padding(start = liquidGlassToolbarSpacing),
+        modifier: Modifier.padding(start = liquidGlassToolbarSpacing).size(liquidGlassTopToolbarHeight),
         enabled: true,
         isProminent: isProminent,
         onClick: onClick,
-        contentPadding: PaddingValues(horizontal: liquidGlassButtonContentInset, vertical: 8.dp)
-    ) { icon() }
+        contentPadding: PaddingValues(0.dp)
+    ) {
+        // iOS 26's chevron rather than Material's arrow, mirrored for right-to-left
+        let mirror = LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl ? Float(-1.0) : Float(1.0)
+        Icon(imageVector: Icons.Rounded.ArrowBackIosNew, contentDescription: "Back", modifier: Modifier.size(20.dp).scale(scaleX: mirror, scaleY: Float(1.0)), tint: (EnvironmentValues.shared._tint ?? Color.primary).colorImpl())
+    }
 }
 
 // MARK: - Backdrop
@@ -68,6 +87,96 @@ import skip.ui.liquidglass.__
         return Modifier
     }
     return Modifier.layerBackdrop(backdrop)
+}
+
+// MARK: - Top bar
+
+/// Whether the top bar is glass, as on iOS 26: transparent, with the content scrolling beneath it onto a blurred edge.
+///
+/// An app-set background, `.visible` background visibility, or the legacy column layout keep the Material bar.
+@Composable func isLiquidGlassTopBarEnabled(_ preferences: ToolbarBarPreferences?) -> Bool {
+    guard isLiquidGlassToolbarEnabled(), EnvironmentValues.shared._layoutImplementationVersion >= 2 else {
+        return false
+    }
+    // `isSystemBackground` is left out: a grouped `List` sets it to match its background, which runs beneath the glass bar
+    return preferences?.background == nil && preferences?.backgroundVisibility != Visibility.visible
+}
+
+/// The iOS 26 navigation bar in place of Material's: a centered title, and a large one that collapses into it.
+// SKIP INSERT: @OptIn(ExperimentalMaterial3Api::class)
+@Composable func LiquidGlassNavigationBar(title: @Composable () -> Void, navigationIcon: @Composable () -> Void, actions: @Composable () -> Void, isLarge: Bool, scrollBehavior: TopAppBarScrollBehavior, windowInsets: WindowInsets, titleColor: androidx.compose.ui.graphics.Color, modifier: Modifier) {
+    LiquidGlassTopAppBar(title: title, navigationIcon: navigationIcon, actions: actions, isLarge: isLarge, scrollBehavior: scrollBehavior, windowInsets: windowInsets, titleColor: titleColor, modifier: modifier)
+}
+
+/// The space before the title: none on the glass bar, which centers it; upstream's left-aligned bar keeps it clear of the
+/// glass back button.
+@Composable func liquidGlassTitleLeadingPadding() -> Dp {
+    return LocalGlassTitleLeadingPadding.current
+}
+
+/// Whether content has scrolled beneath the bar. Observed as a derived state, so the bar recomposes when that changes
+/// rather than on every scrolled pixel.
+// SKIP INSERT: @OptIn(ExperimentalMaterial3Api::class)
+@Composable func isTopBarOverlapped(_ scrollBehavior: TopAppBarScrollBehavior) -> Bool {
+    let isOverlapped = remember(scrollBehavior) { derivedStateOf { scrollBehavior.state.overlappedFraction > Float(0.0) } }
+    return isOverlapped.value
+}
+
+/// The top bar's background: none on the glass bar, whose edge effect replaces it.
+@Composable func liquidGlassTopBarBackgroundColor(_ preferences: ToolbarBarPreferences?) -> androidx.compose.ui.graphics.Color {
+    return isLiquidGlassTopBarEnabled(preferences) ? androidx.compose.ui.graphics.Color.Transparent : Color.systemBarBackground.colorImpl()
+}
+
+/// Renders the top bar, whose glass back button and capsules refract the navigation content beneath a glass bar.
+@Composable func LiquidGlassTopBar(isGlass: Bool, backdrop: Backdrop, content: @Composable () -> Void) {
+    guard isGlass else {
+        content()
+        return
+    }
+    WithGlassBackdrop(backdrop: backdrop, content: content)
+}
+
+/// The blurred edge a glass top bar floats on, washed toward the background as on iOS: lighter in a light theme, darker
+/// in a dark one. None when the bar's background is hidden, so content stays sharp beneath it.
+// SKIP INSERT: @OptIn(ExperimentalMaterial3Api::class)
+@Composable func LiquidGlassTopBarEdgeEffect(isGlass: Bool, backdrop: Backdrop, height: Dp, isLarge: Bool, scrollBehavior: TopAppBarScrollBehavior, preferences: ToolbarBarPreferences?) {
+    guard isGlass, height > 0.dp, preferences?.backgroundVisibility != Visibility.hidden else {
+        return
+    }
+    // The background the bar would paint: its `toolbarColorScheme`'s, a grouped list's, or the screen's
+    let background = preferences?.colorScheme?.asMaterialTheme().background ?? (preferences?.isSystemBackground == true ? Color.systemBarBackground.colorImpl() : Color.background.colorImpl())
+    LiquidGlassTopBarEdge(backdrop: backdrop, height: height, isLarge: isLarge, scrollBehavior: scrollBehavior, wash: background, modifier: Modifier.zIndex(Float(1.0)).fillMaxWidth())
+}
+
+/// The content's safe area under a glass top bar. Its top follows the content's padding, also while a large title
+/// collapses, so a scrollable running beneath the bar measures against where the content actually starts.
+@Composable func liquidGlassNavContentSafeArea(_ safeArea: SafeArea?, isGlass: Bool, topPadding: Dp) -> SafeArea? {
+    guard isGlass, let safeArea else {
+        return safeArea
+    }
+    let safe = safeArea.safeBoundsPx
+    // Rounded as the padding is laid out, so the content's top matches exactly
+    let top = safeArea.presentationBoundsPx.top + with(LocalDensity.current) { Float(topPadding.roundToPx()) }
+    return SafeArea(presentation: safeArea.presentationBoundsPx, safe: Rect(left: safe.left, top: top, right: safe.right, bottom: safe.bottom), absoluteSystemBars: safeArea.absoluteSystemBarEdges)
+}
+
+/// Renders navigation content: a scrollable at its top runs beneath a glass top bar, and scrollables clear a floating
+/// bottom toolbar.
+@Composable func LiquidGlassNavContent(isGlassTopBar: Bool, bottomBarHeightPx: Float, content: @Composable () -> Void) {
+    WithGlassTopBarUnderlay(isUnderlaid: isGlassTopBar) {
+        LiquidGlassBottomBarContent(barHeightPx: bottomBarHeightPx, content: content)
+    }
+}
+
+/// The edges a scrollable runs beneath, clearing the chrome there with a header: the top under a glass top bar, for a
+/// vertical scrollable.
+@Composable func liquidGlassScrollUnderEdges(axes: Axis.Set = .vertical) -> Edge.Set {
+    return axes.contains(.vertical) && LocalGlassTopBarUnderlay.current ? .top : []
+}
+
+/// The header a scrollable adds to clear the chrome it runs beneath by `expansion`.
+@Composable func liquidGlassScrollHeaderHeight(_ expansion: IntRect) -> Dp {
+    return with(LocalDensity.current) { expansion.top.toDp() }
 }
 
 // MARK: - Grouping

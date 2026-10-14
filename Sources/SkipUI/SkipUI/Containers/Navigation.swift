@@ -308,7 +308,7 @@ public struct NavigationStack : View, Renderable {
         let scrollToTop = rememberSaveable(stateSaver: context.stateSaver as! Saver<Preference<ScrollToTopAction>, Any>) { mutableStateOf(Preference<ScrollToTopAction>(key: ScrollToTopPreferenceKey.self)) }
         let scrollToTopCollector = PreferenceCollector<ScrollToTopAction>(key: ScrollToTopPreferenceKey.self, state: scrollToTop)
 
-        let initialScrollBehavior = isInlineTitleDisplayMode ? TopAppBarDefaults.pinnedScrollBehavior() : TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+        let initialScrollBehavior = isInlineTitleDisplayMode || isLiquidGlassTopBarEnabled(topBarPreferences) ? TopAppBarDefaults.pinnedScrollBehavior() : TopAppBarDefaults.exitUntilCollapsedScrollBehavior() // Liquid Glass: a large title scrolls away with the content, see Navigation+LiquidGlass.swift
         // Determine the final scrollBehavior early by checking if the environment value would modify it
         // We need to do this before we create the nestedScroll modifier so we attach the correct nestedScrollConnection
         let scrollBehavior: TopAppBarScrollBehavior
@@ -378,7 +378,7 @@ public struct NavigationStack : View, Renderable {
                         measuredTopBarPresentationTopPx.value = nil
                     }
                 }
-                let isOverlapped = scrollBehavior.state.overlappedFraction > 0
+                let isOverlapped = isTopBarOverlapped(scrollBehavior) // Clockworks fork: recomposes the bar only when this changes, see Navigation+LiquidGlass.swift
                 let materialColorScheme: androidx.compose.material3.ColorScheme
                 if isOverlapped, let customColorScheme = topBarPreferences?.colorScheme?.asMaterialTheme() {
                     materialColorScheme = customColorScheme
@@ -408,7 +408,7 @@ public struct NavigationStack : View, Renderable {
                             topBarBackgroundForBrush = background
                         }
                     } else {
-                        topBarBackgroundColor = Color.systemBarBackground.colorImpl()
+                        topBarBackgroundColor = liquidGlassTopBarBackgroundColor(topBarPreferences) // Liquid Glass: transparent over content scrolling beneath, see Navigation+LiquidGlass.swift
                         unscrolledTopBarBackgroundColor = isSystemBackground ? topBarBackgroundColor : topBarBackgroundColor.copy(alpha: Float(0.0))
                         topBarBackgroundForBrush = nil
                     }
@@ -450,7 +450,7 @@ public struct NavigationStack : View, Renderable {
                         )
                         let topBarTitle: @Composable () -> Void = {
                             if let titleMenu {
-                                let menuModifier = Modifier.padding(start = 8.dp).clickable(interactionSource: interactionSource, indication: nil, onClick: {
+                                let menuModifier = Modifier.padding(start = liquidGlassTitleLeadingPadding()).clickable(interactionSource: interactionSource, indication: nil, onClick: {
                                     titleMenu.toggleMenu()
                                 })
                                 let arrangement = Arrangement.spacedBy(2.dp, alignment: androidx.compose.ui.Alignment.CenterHorizontally)
@@ -460,7 +460,7 @@ public struct NavigationStack : View, Renderable {
                                 }
                                 titleMenu.Render(context: context)
                             } else {
-                                androidx.compose.material3.Text(title.localizedTextString(), modifier: Modifier.padding(start = 8.dp), maxLines: 1, overflow: TextOverflow.Ellipsis) // Liquid Glass: leading padding on the title, see Navigation+LiquidGlass.swift
+                                androidx.compose.material3.Text(title.localizedTextString(), modifier: Modifier.padding(start = liquidGlassTitleLeadingPadding()), maxLines: 1, overflow: TextOverflow.Ellipsis) // Liquid Glass: leading padding on the title, see Navigation+LiquidGlass.swift
                             }
                         }
                         let topBarNavigationIcon: @Composable () -> Void = {
@@ -499,7 +499,9 @@ public struct NavigationStack : View, Renderable {
                         // Use scrollBehavior (from the early call) for the TopAppBar to ensure it matches the nestedScrollConnection
                         options = options.copy(scrollBehavior: scrollBehavior)
                         let topBarWindowInsets = hasAbsoluteTopSystemBar ? TopAppBarDefaults.windowInsets : WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
-                        if isInlineTitleDisplayMode {
+                        if isLiquidGlassTopBarEnabled(topBarPreferences) { // Liquid Glass: the iOS 26 bar, centered title over content scrolling beneath, see Navigation+LiquidGlass.swift
+                            LiquidGlassNavigationBar(title: options.title, navigationIcon: options.navigationIcon, actions: { topBarActions() }, isLarge: !isInlineTitleDisplayMode, scrollBehavior: scrollBehavior, windowInsets: topBarWindowInsets, titleColor: options.colors.titleContentColor, modifier: options.modifier)
+                        } else if isInlineTitleDisplayMode {
                             if options.preferCenterAlignedStyle {
                                 CenterAlignedTopAppBar(title: options.title, modifier: options.modifier, navigationIcon: options.navigationIcon, actions: { topBarActions() }, colors: options.colors, scrollBehavior: options.scrollBehavior, windowInsets: topBarWindowInsets)
                             } else {
@@ -679,6 +681,7 @@ public struct NavigationStack : View, Renderable {
             }
         } else {
             // New Box layout (version >= 2)
+            let isGlassTopBar = showsTopBar && isLiquidGlassTopBarEnabled(topBarPreferences) // Liquid Glass: content scrolls beneath a transparent top bar, see Navigation+LiquidGlass.swift
             Box(modifier: modifier.background(Color.background.colorImpl()).fillMaxSize()) {
                 // Calculate safe area for content by insetting by topBar and bottomBar heights
                 var contentSafeArea: SafeArea?
@@ -691,7 +694,7 @@ public struct NavigationStack : View, Renderable {
 
                 // Top bar aligned to top
                 Box(modifier: Modifier.zIndex(Float(1.1)).align(androidx.compose.ui.Alignment.TopCenter)) {
-                    topBar()
+                    LiquidGlassTopBar(isGlass: isGlassTopBar, backdrop: navGlassBackdrop) { topBar() } // Liquid Glass: capsules refract the content beneath
                 }
 
                 // Bottom bar aligned to bottom
@@ -722,6 +725,8 @@ public struct NavigationStack : View, Renderable {
                 }
 
                 let topPadding = arguments.ignoresSafeAreaEdges.contains(.top) ? max(topBarBottomDp, safeTopDp) : topBarBottomDp
+                contentSafeArea = liquidGlassNavContentSafeArea(contentSafeArea, isGlass: isGlassTopBar, topPadding: topPadding) // Liquid Glass: scrollables beneath the bar measure against the content's padding
+                LiquidGlassTopBarEdgeEffect(isGlass: isGlassTopBar, backdrop: navGlassBackdrop, height: topPadding, isLarge: !isInlineTitleDisplayMode, scrollBehavior: scrollBehavior, preferences: topBarPreferences) // Liquid Glass: the blurred edge the bar floats on
                 let bottomPadding: Dp
 
                 let topBarUnderlayColor: androidx.compose.ui.graphics.Color?
@@ -729,7 +734,7 @@ public struct NavigationStack : View, Renderable {
                     topBarUnderlayColor = nil
                 } else if topBarPreferences?.backgroundVisibility == Visibility.visible {
                     topBarUnderlayColor = topBarPreferences?.background?.asColor(opacity: 1.0, animationContext: nil) ?? Color.systemBarBackground.colorImpl()
-                } else if topBarPreferences?.isSystemBackground == true || reservesInitialRootTopBar {
+                } else if (topBarPreferences?.isSystemBackground == true || reservesInitialRootTopBar) && !isGlassTopBar { // Liquid Glass: the content beneath shows through, see Navigation+LiquidGlass.swift
                     topBarUnderlayColor = Color.systemBarBackground.colorImpl()
                 } else {
                     topBarUnderlayColor = nil
@@ -777,7 +782,7 @@ public struct NavigationStack : View, Renderable {
                     ) {}
                 }
 
-                contentModifier = contentModifier.padding(top: topPadding, bottom: bottomPadding).then(liquidGlassNavContentModifier(navGlassBackdrop)) // Liquid Glass: record what the floating toolbar refracts
+                contentModifier = contentModifier.then(liquidGlassNavContentModifier(navGlassBackdrop)).padding(top: topPadding, bottom: bottomPadding) // Liquid Glass: record what the floating toolbars and edge refract, including beneath the top bar
                 Box(modifier: contentModifier, contentAlignment: androidx.compose.ui.Alignment.Center) {
                     var topPadding = 0.dp
                     let searchableState: SearchableState? = arguments.isRoot ? (EnvironmentValues.shared._searchableState ?? searchableStatePreference.value.reduced) : nil
@@ -808,7 +813,7 @@ public struct NavigationStack : View, Renderable {
                         // Elevate the top padding modifier so that content always has the same context, allowing it to avoid recomposition
                         Box(modifier: Modifier.padding(top: topPadding)) {
                             PreferenceValues.shared.collectPreferences([searchableStateCollector, scrollToTopCollector]) {
-                                content(context.content())
+                                LiquidGlassNavContent(isGlassTopBar: isGlassTopBar, bottomBarHeightPx: bottomBarHeightPx.value) { content(context.content()) } // Liquid Glass: scrollables run beneath the top bar and clear a floating toolbar, see Navigation+LiquidGlass.swift
                             }
                         }
                     }
