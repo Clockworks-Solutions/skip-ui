@@ -39,6 +39,18 @@ internal val liquidGlassTabBarSideMargin = 24.dp
 /** How far above the bar the content starts blurring into the screen's edge. */
 internal val liquidGlassTabBarEdgeFade = 32.dp
 
+/** A tab's least width at full size, which short titles get. Measured from iOS 26. */
+internal val liquidGlassTabMinimumWidth = 90.dp
+
+/** The room a tab keeps beside the bar's widest label, so every tab is that label's width plus this. Measured from iOS 26. */
+internal val liquidGlassTabLabelPadding = 35.dp
+
+/**
+ * The least room a label keeps in a bar capped by the screen. When an equal share leaves the widest label less than
+ * this, each tab is sized to its own label instead, as iOS does, rather than cutting it off.
+ */
+internal val liquidGlassTabCompactLabelPadding = 16.dp
+
 /** The minimized bar's width: one tab icon. */
 internal val liquidGlassMinimizedTabBarWidth = 76.dp
 

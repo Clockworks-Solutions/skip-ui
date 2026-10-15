@@ -44,7 +44,7 @@ adb shell run-as <application id> sh -c 'echo "<map><string name=\"performanceLe
 | `LiquidGlassLight.kt` | The rim highlight, lit from an angle that follows the device's tilt. |
 | `LiquidGlassLayer.kt` | Lazily recorded layers for glass in `overlay`, `background` and `safeAreaInset`. |
 | `LiquidGlassZStack.kt` | The same for a `ZStack`'s children. |
-| `LiquidBottomBar.kt` | The floating tab bar: glass bar, accent layer, dimming pill and badges, in four layers. |
+| `LiquidBottomBar.kt` | The floating tab bar: glass bar, accent layer, dimming pill and badges, in four layers; sized to its labels. |
 | `LiquidGlassTabBarController.kt` | The bar's moving parts (selection, pill, lean, minimize geometry) and the tab row layout, read only while laying out and drawing so animations never recompose a tab. |
 | `LiquidGlassTabBarState.kt` | State a `TabView` shares with its bar, minimize-on-scroll, and the inset locals. |
 | `LiquidGlassTabIcon.kt` | Icons held inside their slot, and iOS-style badges. |
