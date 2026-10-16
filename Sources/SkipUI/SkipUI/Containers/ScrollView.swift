@@ -95,7 +95,8 @@ public struct ScrollView : View, Renderable {
                 PreferenceValues.shared.contribute(context: context, key: ToolbarPreferenceKey.self, value: ToolbarPreferences(scrollableState: scrollState, for: [ToolbarPlacement.bottomBar]))
                 PreferenceValues.shared.contribute(context: context, key: TabBarPreferenceKey.self, value: ToolbarBarPreferences(scrollableState: scrollState))
             }
-            IgnoresSafeAreaLayout(expandInto: [], checkEdges: [.bottom], modifier: modifier, logTag: "ScrollView") { _, safeAreaEdges in
+            IgnoresSafeAreaLayout(expandInto: liquidGlassScrollUnderEdges(axes: effectiveScrollAxes), checkEdges: Edge.Set.bottom.union(liquidGlassScrollUnderEdges(axes: effectiveScrollAxes)), modifier: modifier, logTag: "ScrollView") { safeAreaExpansion, safeAreaEdges in // Liquid Glass: runs beneath a glass top bar, see Navigation+LiquidGlass.swift
+                let headerSafeAreaHeight = liquidGlassScrollHeaderHeight(safeAreaExpansion) // Liquid Glass
                 var containerModifier: Modifier = Modifier
                 if wantsVerticalScroll {
                     containerModifier = containerModifier.fillMaxHeight()
@@ -132,7 +133,7 @@ public struct ScrollView : View, Renderable {
                         finalScrollModifier = scrollModifier
                     }
 
-                    Column(modifier: finalScrollModifier.padding(bottom: liquidGlassScrollContentInset())) { // Liquid Glass: the end of the content can be scrolled clear of the floating glass chrome, see TabView+LiquidGlass.swift
+                    Column(modifier: finalScrollModifier.padding(top: headerSafeAreaHeight, bottom: liquidGlassScrollContentInset())) { // Liquid Glass: the content clears a glass top bar it runs beneath, and its end scrolls clear of the floating glass chrome, see TabView+LiquidGlass.swift
                         if wantsVerticalScroll {
                             let searchableState = EnvironmentValues.shared._searchableState
                             let isSearchable = searchableState?.isOnNavigationStack == false
@@ -154,7 +155,7 @@ public struct ScrollView : View, Renderable {
                         }
                     }
                     if let refreshState {
-                        PullRefreshIndicator(refreshing.value, refreshState, Modifier.align(androidx.compose.ui.Alignment.TopCenter))
+                        PullRefreshIndicator(refreshing.value, refreshState, Modifier.align(androidx.compose.ui.Alignment.TopCenter).padding(top: headerSafeAreaHeight)) // Liquid Glass: below any bar the content runs beneath
                     }
                 }
             }

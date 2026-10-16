@@ -22,8 +22,19 @@ internal val liquidGlassToolbarItemSpacing = liquidGlassToolbarContentPadding + 
 /** A capsule's height in the bottom bar. */
 internal val liquidGlassToolbarHeight = 48.dp
 
-/** A capsule's height in the top bar. */
-internal val liquidGlassTopToolbarHeight = 40.dp
+/** A capsule's height in the top bar, and the back button's size, as on iOS 26. */
+internal val liquidGlassTopToolbarHeight = 44.dp
+
+// MARK: - Navigation bar
+
+/** The bar's height with an inline title: Material's, from which SkipUI pads the content. */
+internal val liquidGlassTopBarHeight = 64.dp
+
+/** The bar's height with its large title expanded: Material's, from which SkipUI pads the content. */
+internal val liquidGlassLargeTopBarHeight = 112.dp
+
+/** How far below the navigation bar the content finishes fading in, as on iOS 26. */
+internal val liquidGlassTopEdgeFade = 24.dp
 
 /** The space kept above and below an icon in a capsule; a taller icon is scaled to fit. */
 internal val liquidGlassToolbarIconInset = 8.dp
@@ -36,8 +47,8 @@ internal val liquidGlassToolbarGap = 8.dp
 /** The bar's margin from the screen's sides, full size and minimized. */
 internal val liquidGlassTabBarSideMargin = 24.dp
 
-/** How far above the bar the content starts blurring into the screen's edge. */
-internal val liquidGlassTabBarEdgeFade = 32.dp
+/** How far past the tab bar or navigation bar the content starts blurring into the screen's edge. */
+internal val liquidGlassEdgeFade = 32.dp
 
 /** A tab's least width at full size, which short titles get. Measured from iOS 26. */
 internal val liquidGlassTabMinimumWidth = 90.dp

@@ -68,6 +68,10 @@ The glass bar takes no layout space, so content runs beneath it. Two values carr
 - **`LocalGlassTabBarInset`** moves things: a nested bar and a bottom toolbar pad themselves above the bar.
 - **`LocalGlassContentInset`** moves nothing: scrollables add it after their content so the end clears the chrome.
 
+The navigation bar works the other way round: content stays below it, and **`LocalGlassTopBarUnderlay`** lets a
+scrollable at the top of the content expand up beneath the bar, clearing it with a header. Both bars float on the same
+blurred edge, mirrored.
+
 `safeAreaInset(edge: .bottom)` follows iOS: inside a tab it sits just above the bar; on a `TabView` the bar stays at the
 bottom with the inset drawn over it. A sheet or cover starts with every glass local reset (`WithoutGlassChrome`), as an
 iOS presentation is its own window.
