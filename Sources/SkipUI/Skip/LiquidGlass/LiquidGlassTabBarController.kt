@@ -12,6 +12,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -67,6 +68,9 @@ internal class LiquidGlassTabBarController(
 
     /** The width the tabs share, in pixels, set by the bar's layout. */
     var contentWidth by mutableFloatStateOf(0f)
+
+    /** Each tab's share of the full-size bar, from [GlassTabBarLayout]; empty when they share it equally. */
+    var tabWeights by mutableStateOf<List<Float>>(emptyList())
 
     /** The pill's position as a fractional tab index, with its press scale and velocity. */
     val pill = DampedDragAnimation(
@@ -131,7 +135,7 @@ internal class LiquidGlassTabBarController(
 
     private fun drag(deltaX: Float) {
         if (isMinimized) return
-        val tabWidth = contentWidth / tabs.size.coerceAtLeast(1)
+        val tabWidth = tabWidth(pill.targetValue.roundToInt().coerceIn(0, lastIndex), contentWidth)
         if (tabWidth <= 0f) return
         val direction = if (isLtr) 1f else -1f
         pill.updateValue((pill.targetValue + deltaX / tabWidth * direction).coerceIn(0f, lastIndex.toFloat()))
@@ -169,7 +173,10 @@ internal class LiquidGlassTabBarController(
     }
 
     /** The share of the width the tab at [index] takes: the selected one keeps its share as the others collapse. */
-    fun weight(index: Int): Float = if (index == selectedIndex) 1f else (1f - minimizeProgress()).coerceAtLeast(0.0001f)
+    fun weight(index: Int): Float {
+        val share = tabWeights.getOrNull(index) ?: 1f
+        return if (index == selectedIndex) share else share * (1f - minimizeProgress()).coerceAtLeast(0.0001f)
+    }
 
     /** The leading edge of the tab at [index] within [width], in pixels from the leading side. */
     fun tabStart(index: Int, width: Float): Float {
@@ -184,10 +191,10 @@ internal class LiquidGlassTabBarController(
     /** The pill's leading edge within [width], between the two tabs it is passing. */
     fun pillStart(width: Float): Float = interpolate(width) { tabStart(it, width) }
 
-    /** The pill's width within [width], between the two tabs it is passing. At full size every tab is as wide, so the
-     *  slide isn't read and doesn't relayout the pill. */
+    /** The pill's width within [width], between the two tabs it is passing. At full size with equal tabs every tab is
+     *  as wide, so the slide isn't read and doesn't relayout the pill. */
     fun pillWidth(width: Float): Float =
-        if (minimizeProgress() == 0f) width / tabs.size.coerceAtLeast(1) else interpolate(width) { tabWidth(it, width) }
+        if (minimizeProgress() == 0f && tabWeights.isEmpty()) width / tabs.size.coerceAtLeast(1) else interpolate(width) { tabWidth(it, width) }
 
     /** 1 for the tab under the pill, falling to 0 a tab away. */
     fun proximity(index: Int): Float = (1f - abs(pill.value - index)).coerceIn(0f, 1f)

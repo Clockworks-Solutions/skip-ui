@@ -12,7 +12,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -48,6 +47,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -102,9 +102,10 @@ private fun barHeight(minimizeProgress: Float): Dp = lerp(liquidGlassTabBarHeigh
 /**
  * The glass bar for SkipUI's `TabView`, floating over the tab content in place of the Material `NavigationBar`.
  *
- * Takes no height, so content scrolls beneath it. About 88dp per tab, within 24dp side margins; it sits above the
- * system bar, or an outer bar when nested, and publishes its footprint through [LiquidGlassTabBarState]. Minimizing
- * animates the bar's size while laying out, so the tabs aren't recomposed on each frame.
+ * Takes no height, so content scrolls beneath it. Sized to its labels as iOS sizes it (see [glassTabBarLayout]), within
+ * 24dp side margins; it sits above the system bar, or an outer bar when nested, and publishes its footprint through
+ * [LiquidGlassTabBarState]. Minimizing animates the bar's size while laying out, so the tabs aren't recomposed on each
+ * frame.
  *
  * @param tabIndices The `TabView` indices of the visible tabs, in order.
  * @param onTabSelected Called on every tap, including on the selected tab.
@@ -150,24 +151,23 @@ internal fun LiquidGlassTabView(
             // Fades out as the bar minimizes
             alpha = remember(minimizeProgress) { { 1f - minimizeProgress() } }
         )
-        BoxWithConstraints(
+        GlassTabBarSizer(
+            tabs = tabs,
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight(align = Alignment.Bottom, unbounded = true)
-                .padding(bottom = bottomInset + 2.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            val availableWidth = maxWidth
-            val fullWidth = minOf(88.dp * tabs.size, (availableWidth - liquidGlassTabBarSideMargin * 2f).coerceAtLeast(0.dp))
+                .padding(bottom = bottomInset + 2.dp)
+        ) { availableWidth, barLayout ->
             LiquidGlassTabBar(
                 backdrop = state.backdrop,
                 tabs = tabs,
                 selectedIndex = tabIndices.indexOf(selectedTabIndex).coerceAtLeast(0),
                 onTabSelected = { onTabSelected(tabIndices[it]) },
+                tabWeights = barLayout.tabWeights,
                 modifier = Modifier
                     .layout { measurable, constraints ->
                         val progress = minimizeProgress()
-                        val width = lerp(fullWidth, liquidGlassMinimizedTabBarWidth, progress)
+                        val width = lerp(barLayout.width, liquidGlassMinimizedTabBarWidth, progress)
                         val placeable = measurable.measure(Constraints.fixedWidth(width.roundToPx()).copy(maxHeight = constraints.maxHeight))
                         layout(placeable.width, placeable.height) {
                             // Minimizing tucks the bar into the leading edge, out of the content's way
@@ -194,6 +194,90 @@ internal fun LiquidGlassTabView(
 }
 
 /**
+ * The full-size bar's width and each tab's share of it.
+ *
+ * @property tabWeights Each tab's share of the bar; empty when every tab is as wide.
+ */
+@Immutable
+internal data class GlassTabBarLayout(val width: Dp, val tabWeights: List<Float>)
+
+/**
+ * Sizes the bar to its labels as iOS 26 does: every tab is as wide as the widest label plus
+ * [liquidGlassTabLabelPadding], and never narrower than [liquidGlassTabMinimumWidth]. A bar wider than [maxWidth] is
+ * capped there; its tabs still share it equally while the widest label keeps [liquidGlassTabCompactLabelPadding],
+ * and otherwise each tab takes its own label's width plus an equal share of what is left, so no label is cut off.
+ *
+ * @param labelWidths Each tab's label, or icon if wider.
+ * @param maxWidth The widest the bar may be.
+ */
+internal fun glassTabBarLayout(labelWidths: List<Dp>, maxWidth: Dp): GlassTabBarLayout {
+    val count = labelWidths.size.coerceAtLeast(1)
+    val widest = labelWidths.maxOrNull() ?: 0.dp
+    val tabWidth = maxOf(liquidGlassTabMinimumWidth, widest + liquidGlassTabLabelPadding)
+    val width = tabWidth * count + tabInset * 2
+    if (width <= maxWidth) return GlassTabBarLayout(width, emptyList())
+
+    val contentWidth = (maxWidth - tabInset * 2).coerceAtLeast(0.dp)
+    if (contentWidth / count >= widest + liquidGlassTabCompactLabelPadding) return GlassTabBarLayout(maxWidth, emptyList())
+    val spare = ((contentWidth - labelWidths.fold(0.dp) { total, labelWidth -> total + labelWidth }) / count).coerceAtLeast(0.dp)
+    return GlassTabBarLayout(maxWidth, labelWidths.map { (it + spare).value.coerceAtLeast(0.0001f) })
+}
+
+/** The slots of [GlassTabBarSizer]. */
+private enum class GlassTabBarSlot { LABELS, BAR }
+
+/**
+ * Measures each tab's label as the bar draws it, then lays out [bar], given the width available and the
+ * [GlassTabBarLayout] that fits the labels, centered in that width.
+ *
+ * The labels are measured while laying out, so the first frame already has the right width. [bar] is recomposed only
+ * when that layout or [bar] itself changes, never as the bar resizes while minimizing.
+ */
+@Composable
+private fun GlassTabBarSizer(tabs: List<GlassTab>, modifier: Modifier = Modifier, bar: @Composable (availableWidth: Dp, layout: GlassTabBarLayout) -> Unit) {
+    val iconSize = glassTabIconSize()
+    val labels: @Composable () -> Unit = {
+        ProvideTextStyle(labelStyle) {
+            tabs.forEach { tab -> Box { tab.title() } }
+        }
+    }
+    val barContent = remember { GlassTabBarContent() }
+    SubcomposeLayout(modifier = modifier) { constraints ->
+        val labelWidths = subcompose(GlassTabBarSlot.LABELS, labels).map { maxOf(it.maxIntrinsicWidth(Constraints.Infinity).toDp(), iconSize) }
+        val availableWidth = constraints.maxWidth.toDp()
+        val barLayout = glassTabBarLayout(labelWidths, (availableWidth - liquidGlassTabBarSideMargin * 2f).coerceAtLeast(0.dp))
+        val placeables = subcompose(GlassTabBarSlot.BAR, barContent.content(availableWidth, barLayout, bar)).map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+        val width = constraints.maxWidth
+        val height = placeables.maxOfOrNull { it.height } ?: 0
+        layout(width, height) {
+            placeables.forEach { it.place((width - it.width) / 2, 0) }
+        }
+    }
+}
+
+/** [GlassTabBarSizer]'s bar content, kept while its inputs are, so measuring again doesn't recompose the bar. */
+private class GlassTabBarContent {
+    private var availableWidth = Dp.Unspecified
+    private var layout: GlassTabBarLayout? = null
+    private var bar: (@Composable (Dp, GlassTabBarLayout) -> Unit)? = null
+    private var content: @Composable () -> Unit = {}
+
+    fun content(availableWidth: Dp, layout: GlassTabBarLayout, bar: @Composable (Dp, GlassTabBarLayout) -> Unit): @Composable () -> Unit {
+        if (availableWidth != this.availableWidth || layout != this.layout || bar !== this.bar) {
+            this.availableWidth = availableWidth
+            this.layout = layout
+            this.bar = bar
+            content = { bar(availableWidth, layout) }
+        }
+        return content
+    }
+}
+
+/** A tab icon's size: smaller in landscape, where the bar is shorter. */
+@Composable
+private fun glassTabIconSize(): Dp = if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) 22.dp else 30.dp
+
+/**
  * A capsule glass tab bar with a draggable selection pill.
  *
  * Tap a tab, or drag the pill and release to snap. Pressed, the pill grows, stretches with its velocity and magnifies
@@ -210,6 +294,7 @@ internal fun LiquidGlassTabView(
  *
  * @param backdrop The recorded content behind the bar.
  * @param onTabSelected Called with the picked position, by tap or drag, including a re-tap of the selected tab.
+ * @param tabWeights Each tab's share of the bar, from [GlassTabBarLayout]; empty when every tab is as wide.
  * @param accentColor The selected tab's color; unspecified falls back to the system blue.
  * @param backgroundColor A color over the frost; opaque makes the bar opaque.
  * @param contentColor The unselected tab color; unspecified follows the glass.
@@ -223,6 +308,7 @@ internal fun LiquidGlassTabBar(
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    tabWeights: List<Float> = emptyList(),
     style: LiquidGlassStyle = LiquidGlassStyle.current,
     accentColor: Color = Color.Unspecified,
     backgroundColor: Color = Color.Unspecified,
@@ -235,6 +321,7 @@ internal fun LiquidGlassTabBar(
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     SideEffect {
         controller.tabs = tabs
+        controller.tabWeights = tabWeights
         controller.onTabSelected = onTabSelected
         controller.onExpand = onExpand
         controller.isLtr = isLtr
@@ -251,7 +338,7 @@ internal fun LiquidGlassTabBar(
         if (backgroundColor.isSpecified && backgroundColor.alpha > 0f) drawRect(backgroundColor)
     }
 
-    val iconSize = if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) 22.dp else 30.dp
+    val iconSize = glassTabIconSize()
     val textStyle = LocalTextStyle.current
     // SkipUI draws a tab icon at 1.5× the font size, so the icon is sized through the text style
     val cellStyle = remember(iconSize, textStyle) { GlassTabCellStyle(iconSize, textStyle.copy(fontSize = (iconSize.value / 1.5f).sp)) }
