@@ -28,10 +28,8 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
@@ -64,6 +62,7 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,6 +95,7 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultPredictivePopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
+import kotlin.math.roundToInt
 import kotlin.reflect.full.superclasses
 import kotlinx.serialization.Serializable
 import androidx.compose.runtime.key
@@ -274,9 +274,15 @@ public struct NavigationStack : View, Renderable {
 
         let topBarPreferences = arguments.toolbarPreferences.navigationBar
         let bottomBarPreferences = arguments.toolbarPreferences.bottomBar
+        // Content asks for the bar's visibility through `topBarVisibility`, which only the bar reads, so that hiding and
+        // showing it never recomposes the entry. The entry only reads whether the bar is hidden from the start
+        let topBarVisibility = remember { BarVisibility() }
+        let isTopBarHiddenFromStart = remember { derivedStateOf { topBarVisibility.isHiddenFromStart } }.value
+        let isTopBarRequestedVisible = remember { derivedStateOf { topBarVisibility.visibility.value == Visibility.visible } }.value
+        let requestedTopBarVisibility = isTopBarHiddenFromStart ? Visibility.hidden : isTopBarRequestedVisible ? Visibility.visible : topBarPreferences?.visibility ?? Visibility.automatic
         let presentationTopPx = arguments.safeArea?.presentationBoundsPx.top ?? Float(0.0)
         let isInitialRootPreferencePass = remember { mutableStateOf(arguments.isRoot) }
-        let reservesInitialRootTopBar = isInitialRootPreferencePass.value && arguments.isRoot && !hasTitle && (topBarPreferences?.visibility ?? Visibility.automatic) == Visibility.automatic
+        let reservesInitialRootTopBar = isInitialRootPreferencePass.value && arguments.isRoot && !hasTitle && requestedTopBarVisibility == Visibility.automatic
         let effectiveTitleDisplayMode = navigator.value.titleDisplayMode(for: state, hasTitle: hasTitle || reservesInitialRootTopBar, preference: titleDisplayPreference)
         let isInlineTitleDisplayMode = useInlineTitleDisplayMode(for: effectiveTitleDisplayMode, safeArea: arguments.safeArea)
 
@@ -288,7 +294,7 @@ public struct NavigationStack : View, Renderable {
         let (titleMenu, topLeadingItems, topTrailingItems, bottomItems) = toolbarItems.Evaluate(context: context)
 
         let showTopBar: Bool
-        switch topBarPreferences?.visibility ?? Visibility.automatic {
+        switch requestedTopBarVisibility {
         case .hidden:
             showTopBar = false
         case .visible:
@@ -325,7 +331,10 @@ public struct NavigationStack : View, Renderable {
             navigationIconButtonStyle = Material3TopAppBarNavigationIconButtonStyle.iconButton
             navigationIconButtonColors = nil
         }
-        var modifier = Modifier.nestedScroll(searchFieldScrollConnection)
+        // The search field connection consumes scrolling until the field tucks under the bar, so only attach it with a
+        // field to tuck: otherwise it swallows the start of every upward scroll after the content returns to the top
+        let hasSearchField = arguments.isRoot && (EnvironmentValues.shared._searchableState ?? searchableStatePreference.value.reduced) != nil
+        var modifier: Modifier = hasSearchField ? Modifier.nestedScroll(searchFieldScrollConnection) : Modifier
         SideEffect {
             if isInitialRootPreferencePass.value {
                 isInitialRootPreferencePass.value = false
@@ -364,13 +373,29 @@ public struct NavigationStack : View, Renderable {
         let hasCurrentTopBarMeasurement = measuredTopBarIsInline.value == isInlineTitleDisplayMode && (isPresentedAsSheet || safeAreaMatchesMeasuredTopBar) && topBarBottomPx.value > Float(0.0)
         let effectiveTopBarBottomPx = shouldReserveInitialTopBarSpace ? presentationTopPx + (hasCurrentTopBarMeasurement ? topBarBottomPx.value : estimatedTopBarBottomInPresentationPx) : Float(0.0)
         let isSystemBackground = topBarPreferences?.isSystemBackground == true
+        let topBarAnimation = Animation.current(isAnimating: false) ?? topBarPreferences?.visibilityAnimation
+        let isGlassTopBar = showsTopBar && isLiquidGlassTopBarEnabled(topBarPreferences) // Liquid Glass: content scrolls beneath a transparent top bar, see Navigation+LiquidGlass.swift
+        let topBarUnderlayColor: androidx.compose.ui.graphics.Color?
+        if topBarPreferences?.backgroundVisibility == Visibility.hidden {
+            topBarUnderlayColor = nil
+        } else if topBarPreferences?.backgroundVisibility == Visibility.visible {
+            topBarUnderlayColor = topBarPreferences?.background?.asColor(opacity: 1.0, animationContext: nil) ?? Color.systemBarBackground.colorImpl()
+        } else if (isSystemBackground || reservesInitialRootTopBar) && !isGlassTopBar { // Liquid Glass: the content beneath shows through, see Navigation+LiquidGlass.swift
+            topBarUnderlayColor = Color.systemBarBackground.colorImpl()
+        } else {
+            topBarUnderlayColor = nil
+        }
         let topBar: @Composable () -> Void = {
-            let animation: Animation = Animation.current(isAnimating: false) ?? topBarPreferences?.visibilityAnimation ?? Animation.linear(duration: 0)
-            let animationSpec: AnimationSpec<Any> = animation.asAnimationSpec()
+            // Read the requested visibility here, in the bar's own scope
+            let isPresented = showsTopBar && topBarVisibility.visibility.value != Visibility.hidden
+            let animation = topBarVisibility.animation ?? topBarAnimation
+            topBarVisibility.fraction = animatedBarFraction(isVisible: isPresented, animation: animation, label: "NavigationTopBar")
+            let animationSpec: AnimationSpec<Any> = (animation ?? Animation.linear(duration: 0)).asAnimationSpec()
             let moveEdgeTop = MoveTransition(edge: .top)
             let topBarEnter = moveEdgeTop.asEnterTransition(spec: animationSpec)
             let topBarExit = moveEdgeTop.asExitTransition(spec: animationSpec)
-            AnimatedVisibility(visible: showsTopBar, modifier: Modifier.fillMaxWidth(), enter: topBarEnter, exit: topBarExit, label: "NavigationTopBar") {
+            // Showing and hiding with toolbarVisibility only slides the bar, in step with views attached beneath it
+            AnimatedVisibility(visible: showsTopBar, modifier: Modifier.fillMaxWidth().then(slidingAway(topBarVisibility, edge: VerticalEdge.top)), enter: topBarEnter, exit: topBarExit, label: "NavigationTopBar") {
                 DisposableEffect(true) {
                     onDispose {
                         topBarBottomPx.value = Float(0.0)
@@ -427,6 +452,8 @@ public struct NavigationStack : View, Renderable {
                             })
                             .onGloballyPositioned { coordinates in
                                 let heightPx = Float(coordinates.size.height)
+                                // The bar slides off the screen entirely
+                                topBarVisibility.travelPx = heightPx
                                 if heightPx > Float(0.0) {
                                     // Toolbar item content can measure taller in some locales. Keep the content inset
                                     // tied to the standard app bar height so navigation transitions stay stable.
@@ -435,7 +462,12 @@ public struct NavigationStack : View, Renderable {
                                 }
                                 measuredTopBarSafeAreaTopPx.value = safeAreaTopPx
                                 measuredTopBarPresentationTopPx.value = presentationTopPx
+                                topBarVisibility.hasShown.value = true
                             }
+                        if EnvironmentValues.shared._layoutImplementationVersion >= 2, let topBarUnderlayColor {
+                            // The Box layout draws the bar's background with the bar, so that it slides with it
+                            topBarModifier = topBarModifier.background(topBarUnderlayColor)
+                        }
                         if !topBarHasColorScheme || isOverlapped, let topBarBackgroundForBrush {
                             let opacity = topBarHasColorScheme ? 1.0 : isInlineTitleDisplayMode ? min(1.0, Double(scrollBehavior.state.overlappedFraction * 5)) : Double(scrollBehavior.state.collapsedFraction)
                             if let topBarBackgroundBrush = topBarBackgroundForBrush.asBrush(opacity: opacity, animationContext: nil) {
@@ -595,7 +627,7 @@ public struct NavigationStack : View, Renderable {
                         }
                     }
                     // Pull the bottom bar below the keyboard
-                    let bottomPadding = with(density) { min(bottomBarHeightPx.value, Float(WindowInsets.ime.getBottom(density))).toDp() }
+                    let bottomPadding = with(density) { min(bottomBarHeightPx.value, Float(windowKeyboardInsets().getBottom(density))).toDp() }
                     PaddingLayout(padding: EdgeInsets(top: 0.0, leading: 0.0, bottom: Double(-bottomPadding.value), trailing: 0.0), context: context.content()) { context in
                         let containerColor = showScrolledBackground ? bottomBarBackgroundColor : unscrolledBottomBarBackgroundColor
                         let usesBottomSystemBarInset = EnvironmentValues.shared._isEdgeToEdge == true && arguments.safeArea?.absoluteSystemBarEdges.contains(.bottom) == true
@@ -634,10 +666,10 @@ public struct NavigationStack : View, Renderable {
                     .insetting(.top, to: effectiveTopBarBottomPx)
                     .insetting(.bottom, to: bottomBarTopPx.value)
                 // Inset manually for any edge where our container ignored the safe area, but we aren't showing a bar
-                let topPadding = effectiveTopBarBottomPx <= Float(0.0) && arguments.ignoresSafeAreaEdges.contains(.top) ? WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() : 0.dp
+                let topPadding = effectiveTopBarBottomPx <= Float(0.0) && arguments.ignoresSafeAreaEdges.contains(.top) ? windowSafeDrawingInsets().asPaddingValues().calculateTopPadding() : 0.dp
                 var bottomPadding = 0.dp
                 if bottomBarTopPx.value <= Float(0.0) && arguments.ignoresSafeAreaEdges.contains(.bottom) {
-                    bottomPadding = max(0.dp, WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding())
+                    bottomPadding = max(0.dp, windowSafeDrawingInsets().asPaddingValues().calculateBottomPadding() - windowKeyboardInsets().asPaddingValues().calculateBottomPadding())
                 }
                 let contentModifier = Modifier.fillMaxWidth().weight(Float(1.0)).padding(top: topPadding, bottom: bottomPadding)
 
@@ -664,6 +696,7 @@ public struct NavigationStack : View, Renderable {
                         if let contentSafeArea {
                             $0.set_safeArea(contentSafeArea)
                         }
+                        $0.set_navigationBarVisibility(topBarVisibility)
                         $0.set_searchableState(searchableState)
                         $0.set_isNavigationRoot(arguments.isRoot)
                         $0.set_nestedScrollConnection(scrollBehavior.nestedScrollConnection)
@@ -681,17 +714,7 @@ public struct NavigationStack : View, Renderable {
             }
         } else {
             // New Box layout (version >= 2)
-            let isGlassTopBar = showsTopBar && isLiquidGlassTopBarEnabled(topBarPreferences) // Liquid Glass: content scrolls beneath a transparent top bar, see Navigation+LiquidGlass.swift
             Box(modifier: modifier.background(Color.background.colorImpl()).fillMaxSize()) {
-                // Calculate safe area for content by insetting by topBar and bottomBar heights
-                var contentSafeArea: SafeArea?
-                if let safeArea = arguments.safeArea {
-                    let clampedTopBarBottomPxValue: Float = max(effectiveTopBarBottomPx, safeArea.safeBoundsPx.top)
-                    contentSafeArea = safeArea
-                        .insetting(.top, to: clampedTopBarBottomPxValue)
-                        .insetting(.bottom, to: bottomBarTopPx.value)
-                }
-
                 // Top bar aligned to top
                 Box(modifier: Modifier.zIndex(Float(1.1)).align(androidx.compose.ui.Alignment.TopCenter)) {
                     LiquidGlassTopBar(isGlass: isGlassTopBar, backdrop: navGlassBackdrop) { topBar() } // Liquid Glass: capsules refract the content beneath
@@ -702,53 +725,41 @@ public struct NavigationStack : View, Renderable {
                     bottomBar()
                 }
 
-                // Constrain the content to the area between the top bar and bottom bar. In the Box layout we use
-                // fillMaxSize(), so we must add top/bottom padding to reserve space for our nav bars. Use the
-                // measured topBarBottomPx and bottomBarHeightPx when the bars are visible. When a bar is hidden,
-                // inset by the system safe area (WindowInsets.safeDrawing) for that edge when
-                // arguments.ignoresSafeAreaEdges contains it, so content does not overlap the status bar or home
-                // indicator.
+                // The top bar floats over the content, which fills the entry and insets itself by the space the bar covers:
+                // down to the bar's bottom, and the system safe area (windowSafeDrawingInsets) without a bar, where
+                // arguments.ignoresSafeAreaEdges contains the top. Scrollables run beneath the bar, reserving its space
+                // inside their content instead. A bar hidden with toolbarVisibility keeps its space and slides away over
+                // the content, so that nothing beneath it moves
                 var contentModifier = Modifier.fillMaxSize()
-                let safeTopDp = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
-                let topBarBottomDp: Dp
+                let hiddenTopPaddingPx = arguments.ignoresSafeAreaEdges.contains(.top) ? Float(windowSafeDrawingInsets().getTop(density)) : Float(0.0)
+                var topBarPaddingPx = hiddenTopPaddingPx
                 if showsTopBar {
+                    let topBarBottomPx: Float
                     if isInlineTitleDisplayMode {
-                        let localTopBarBottomPx = max(Float(0.0), effectiveTopBarBottomPx - (arguments.safeArea?.presentationBoundsPx.top ?? Float(0.0)))
-                        topBarBottomDp = with(density) { localTopBarBottomPx.toDp() }
+                        topBarBottomPx = max(Float(0.0), effectiveTopBarBottomPx - presentationTopPx)
                     } else {
-                        let localSafeAreaTopDp = with(density) { max(Float(0.0), safeAreaTopPx - presentationTopPx).toDp() }
                         let topBarHeightDp = estimatedCollapsedTopBarHeight + ((estimatedExpandedTopBarHeight - estimatedCollapsedTopBarHeight) * Float(1.0 - scrollBehavior.state.collapsedFraction))
-                        topBarBottomDp = localSafeAreaTopDp + topBarHeightDp
+                        topBarBottomPx = max(Float(0.0), safeAreaTopPx - presentationTopPx) + with(density) { topBarHeightDp.toPx() }
                     }
-                } else {
-                    topBarBottomDp = 0.dp
+                    topBarPaddingPx = max(topBarBottomPx, hiddenTopPaddingPx)
                 }
-
-                let topPadding = arguments.ignoresSafeAreaEdges.contains(.top) ? max(topBarBottomDp, safeTopDp) : topBarBottomDp
-                contentSafeArea = liquidGlassNavContentSafeArea(contentSafeArea, isGlass: isGlassTopBar, topPadding: topPadding) // Liquid Glass: scrollables beneath the bar measure against the content's padding
+                // Whole pixels, so that the padding and the safe area agree exactly
+                let topPaddingPx = Float(topBarPaddingPx.roundToInt())
+                let topPadding = with(density) { topPaddingPx.toDp() }
+                topBarVisibility.heightPx = topPaddingPx - hiddenTopPaddingPx
                 LiquidGlassTopBarEdgeEffect(isGlass: isGlassTopBar, backdrop: navGlassBackdrop, height: topPadding, isLarge: !isInlineTitleDisplayMode, scrollBehavior: scrollBehavior, preferences: topBarPreferences) // Liquid Glass: the blurred edge the bar floats on
                 let bottomPadding: Dp
 
-                let topBarUnderlayColor: androidx.compose.ui.graphics.Color?
-                if topBarPreferences?.backgroundVisibility == Visibility.hidden {
-                    topBarUnderlayColor = nil
-                } else if topBarPreferences?.backgroundVisibility == Visibility.visible {
-                    topBarUnderlayColor = topBarPreferences?.background?.asColor(opacity: 1.0, animationContext: nil) ?? Color.systemBarBackground.colorImpl()
-                } else if (topBarPreferences?.isSystemBackground == true || reservesInitialRootTopBar) && !isGlassTopBar { // Liquid Glass: the content beneath shows through, see Navigation+LiquidGlass.swift
-                    topBarUnderlayColor = Color.systemBarBackground.colorImpl()
-                } else {
-                    topBarUnderlayColor = nil
+                var contentSafeArea: SafeArea?
+                if let safeArea = arguments.safeArea {
+                    contentSafeArea = safeArea
+                        .insetting(.top, to: max(presentationTopPx + topPaddingPx, safeArea.safeBoundsPx.top), isBar: true)
+                        .insetting(.bottom, to: bottomBarTopPx.value)
                 }
 
-                if showsTopBar && topPadding.value > Float(0.0), let topBarUnderlayColor {
-                    Box(
-                        modifier: Modifier
-                            .zIndex(Float(1.0))
-                            .align(androidx.compose.ui.Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .height(topPadding)
-                            .background(topBarUnderlayColor)
-                    ) {}
+                // While the bar is hidden, keep content scrolled beneath it out of the status bar
+                if showsTopBar && hiddenTopPaddingPx > Float(0.0) {
+                    HiddenBarScrim(bar: topBarVisibility, height: with(density) { hiddenTopPaddingPx.toDp() }, color: topBarUnderlayColor ?? Color.background.colorImpl(), modifier: Modifier.zIndex(Float(1.05)).align(androidx.compose.ui.Alignment.TopCenter))
                 }
 
                 if bottomBarHeightPx.value > Float(0.0) {
@@ -756,7 +767,7 @@ public struct NavigationStack : View, Renderable {
                     // and through the glass bar below, see TabView+LiquidGlass.swift
                     bottomPadding = isLiquidGlassBottomBarFloating() ? 0.dp : with(density) { bottomBarHeightPx.value.toDp() }
                 } else if arguments.ignoresSafeAreaEdges.contains(.bottom) {
-                    bottomPadding = max(0.dp, WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding())
+                    bottomPadding = max(0.dp, windowSafeDrawingInsets().asPaddingValues().calculateBottomPadding() - windowKeyboardInsets().asPaddingValues().calculateBottomPadding())
                 } else {
                     bottomPadding = 0.dp
                 }
@@ -785,12 +796,16 @@ public struct NavigationStack : View, Renderable {
                 contentModifier = contentModifier.then(liquidGlassNavContentModifier(navGlassBackdrop)).padding(top: topPadding, bottom: bottomPadding) // Liquid Glass: record what the floating toolbars and edge refract, including beneath the top bar
                 Box(modifier: contentModifier, contentAlignment: androidx.compose.ui.Alignment.Center) {
                     var topPadding = 0.dp
+                    var searchSafeArea = contentSafeArea
                     let searchableState: SearchableState? = arguments.isRoot ? (EnvironmentValues.shared._searchableState ?? searchableStatePreference.value.reduced) : nil
                     if let searchableState {
                         let searchFieldBackground = isSystemBackground ? Color.systemBarBackground.colorImpl() : androidx.compose.ui.graphics.Color.Transparent
                         let searchFieldFadeOffset = searchFieldHeightPx / 3
+                        // The field belongs to the bar: content scrolls beneath it, and it hides with the bar
                         let searchFieldModifier = Modifier.height(searchFieldHeight.dp + searchFieldPadding)
                             .align(androidx.compose.ui.Alignment.TopCenter)
+                            .zIndex(Float(1.0))
+                            .then(slidingWithBar(topBarVisibility, edge: VerticalEdge.top, hidesWithBar: true))
                             .offset({ IntOffset(0, Int(searchFieldOffsetPx.value)) })
                             .background(searchFieldBackground)
                             .padding(start: searchFieldPadding, bottom: searchFieldPadding, end: searchFieldPadding)
@@ -800,11 +815,16 @@ public struct NavigationStack : View, Renderable {
                         SearchField(state: searchableState, context: context.content(modifier: searchFieldModifier))
                         let searchFieldPlaceholderPadding = searchFieldHeight.dp + searchFieldPadding + (with(LocalDensity.current) { searchFieldOffsetPx.value.toDp() })
                         topPadding = searchFieldPlaceholderPadding
+                        if let contentSafeArea {
+                            let searchFieldBottomPx = presentationTopPx + topPaddingPx + with(density) { searchFieldPlaceholderPadding.toPx() }
+                            searchSafeArea = contentSafeArea.insetting(.top, to: searchFieldBottomPx, isBar: true)
+                        }
                     }
                     EnvironmentValues.shared.setValues {
-                        if let contentSafeArea {
-                            $0.set_safeArea(contentSafeArea)
+                        if let searchSafeArea {
+                            $0.set_safeArea(searchSafeArea)
                         }
+                        $0.set_navigationBarVisibility(topBarVisibility)
                         $0.set_searchableState(searchableState)
                         $0.set_isNavigationRoot(arguments.isRoot)
                         $0.set_nestedScrollConnection(scrollBehavior.nestedScrollConnection)
@@ -1295,6 +1315,7 @@ public struct NavigationBarItem : Hashable {
     }
 }
 
+// SKIP NOWARN
 extension View {
     // SKIP @bridge
     public func navigationBarBackButtonHidden(_ hidesBackButton: Bool = true) -> any View {

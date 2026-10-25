@@ -16,6 +16,7 @@ import androidx.compose.material.pullrefresh.PullRefreshState
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -66,10 +67,11 @@ public struct ScrollView : View, Renderable {
         let scrollsContent = wantsVerticalScroll || wantsHorizontalScroll
         let density = LocalDensity.current.density
         let driver = remember(scrollState, wantsVerticalScroll) { ScrollViewDriver(state: scrollState, isVertical: wantsVerticalScroll, density: density) }
-        var scrollModifier: Modifier = Modifier.onSizeChanged { driver.viewportSize.value = $0 }
+        var scrollModifier: Modifier = Modifier.idealSizeOnUnboundedScrollAxes(vertical: wantsVerticalScroll, horizontal: wantsHorizontalScroll).onSizeChanged { driver.viewportSize.value = $0 }
         var effectiveScrollAxes: Axis.Set = []
         if wantsVerticalScroll {
-            scrollModifier = scrollModifier.verticalScroll(scrollState, enabled: !isScrollDisabled)
+            // Fill the height so a drag below short content still reaches the scroll node, which `pullRefresh` listens to.
+            scrollModifier = scrollModifier.fillMaxHeight().verticalScroll(scrollState, enabled: !isScrollDisabled)
             effectiveScrollAxes.insert(Axis.Set.vertical)
             if !axes.contains(.horizontal) && !isScrollDisabled {
                 // Integrate with our scroll-to-top navigation bar taps
@@ -95,8 +97,12 @@ public struct ScrollView : View, Renderable {
                 PreferenceValues.shared.contribute(context: context, key: ToolbarPreferenceKey.self, value: ToolbarPreferences(scrollableState: scrollState, for: [ToolbarPlacement.bottomBar]))
                 PreferenceValues.shared.contribute(context: context, key: TabBarPreferenceKey.self, value: ToolbarBarPreferences(scrollableState: scrollState))
             }
-            IgnoresSafeAreaLayout(expandInto: liquidGlassScrollUnderEdges(axes: effectiveScrollAxes), checkEdges: Edge.Set.bottom.union(liquidGlassScrollUnderEdges(axes: effectiveScrollAxes)), modifier: modifier, logTag: "ScrollView") { safeAreaExpansion, safeAreaEdges in // Liquid Glass: runs beneath a glass top bar, see Navigation+LiquidGlass.swift
-                let headerSafeAreaHeight = liquidGlassScrollHeaderHeight(safeAreaExpansion) // Liquid Glass
+            // As on iOS, a scroll view that scrolls its content vertically extends beneath system bars and floating app
+            // bars, and insets its content instead. A lazy container scrolling for it extends itself
+            var scrollUnderEdges: Edge.Set = wantsVerticalScroll && !wantsHorizontalScroll ? [.top, .bottom] : []
+            scrollUnderEdges.formIntersection(EnvironmentValues.shared._safeArea?.scrollUnderEdges ?? [])
+            let glassScrollUnderEdges = liquidGlassScrollUnderEdges(axes: effectiveScrollAxes) // Liquid Glass: runs beneath a glass top bar, see Navigation+LiquidGlass.swift
+            IgnoresSafeAreaLayout(expandInto: scrollUnderEdges.union(glassScrollUnderEdges), checkEdges: Edge.Set.bottom.union(glassScrollUnderEdges), modifier: modifier, logTag: "ScrollView") { safeAreaExpansion, safeAreaEdges in
                 var containerModifier: Modifier = Modifier
                 if wantsVerticalScroll {
                     containerModifier = containerModifier.fillMaxHeight()
@@ -123,17 +129,22 @@ public struct ScrollView : View, Renderable {
                 }
                 containerModifier = containerModifier.scrollDismissesKeyboardMode(EnvironmentValues.shared.scrollDismissesKeyboardMode)
 
+                // Reserve the space beneath the bars inside the scrolling content
+                let insetTop = with(LocalDensity.current) { safeAreaExpansion.top.toDp() }
+                let insetBottom = with(LocalDensity.current) { safeAreaExpansion.bottom.toDp() }
+                SideEffect {
+                    driver.contentInsets.value = EdgeInsets(top: Double(insetTop.value), leading: 0.0, bottom: Double(insetBottom.value), trailing: 0.0)
+                }
+
                 Box(modifier: containerModifier) {
                     // Apply content margins as padding to the scrolling content only when this ScrollView is managing scroll
                     // (when a lazy container is the child, it manages its own scroll and will apply margins itself)
-                    let finalScrollModifier: Modifier
+                    var finalScrollModifier = scrollModifier.padding(top: insetTop, bottom: insetBottom)
                     if (wantsVerticalScroll || wantsHorizontalScroll), let contentMargins = EnvironmentValues.shared._contentMargins?.asComposePaddingValues(for: .automatic) {
-                        finalScrollModifier = scrollModifier.padding(contentMargins)
-                    } else {
-                        finalScrollModifier = scrollModifier
+                        finalScrollModifier = finalScrollModifier.padding(contentMargins)
                     }
 
-                    Column(modifier: finalScrollModifier.padding(top: headerSafeAreaHeight, bottom: liquidGlassScrollContentInset())) { // Liquid Glass: the content clears a glass top bar it runs beneath, and its end scrolls clear of the floating glass chrome, see TabView+LiquidGlass.swift
+                    Column(modifier: finalScrollModifier.padding(bottom: liquidGlassScrollContentInset())) { // Liquid Glass: its end scrolls clear of the floating glass chrome, see TabView+LiquidGlass.swift
                         if wantsVerticalScroll {
                             let searchableState = EnvironmentValues.shared._searchableState
                             let isSearchable = searchableState?.isOnNavigationStack == false
@@ -155,7 +166,7 @@ public struct ScrollView : View, Renderable {
                         }
                     }
                     if let refreshState {
-                        PullRefreshIndicator(refreshing.value, refreshState, Modifier.align(androidx.compose.ui.Alignment.TopCenter).padding(top: headerSafeAreaHeight)) // Liquid Glass: below any bar the content runs beneath
+                        PullRefreshIndicator(refreshing.value, refreshState, Modifier.align(androidx.compose.ui.Alignment.TopCenter).padding(top: insetTop))
                     }
                 }
             }
@@ -241,7 +252,18 @@ struct ScrollToIDPreferenceKey: PreferenceKey {
     static let defaultValue = ScrollToIDAction(key: nil, action: { _, _ in })
 
     static func reduce(value: inout ScrollToIDAction, nextValue: () -> ScrollToIDAction) {
-        value = nextValue()
+        // As on iOS, a reader scrolls whichever of its scroll views holds the ID, such as a list beneath a horizontal
+        // menu. Each scroll view ignores IDs it doesn't hold
+        let previous = value
+        let next = nextValue()
+        guard previous.key != nil else {
+            value = next
+            return
+        }
+        value = ScrollToIDAction(key: [previous.key, next.key], action: { id, anchor in
+            previous.action(id, anchor)
+            next.action(id, anchor)
+        })
     }
 }
 
