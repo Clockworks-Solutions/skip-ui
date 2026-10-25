@@ -836,6 +836,11 @@ extension EnvironmentValues {
         set { setBuiltinValue(key: "_contentMargins", value: newValue, defaultValue: { nil }) }
     }
 
+    var _listSectionCornerRadius: CGFloat {
+        get { builtinValue(key: "_listSectionCornerRadius", defaultValue: { 8.0 }) as! CGFloat }
+        set { setBuiltinValue(key: "_listSectionCornerRadius", value: newValue, defaultValue: { 8.0 }) }
+    }
+
     var _listRowSpacing: CGFloat? {
         get { builtinValue(key: "_listRowSpacing", defaultValue: { nil }) as! CGFloat? }
         set { setBuiltinValue(key: "_listRowSpacing", value: newValue, defaultValue: { nil }) }
@@ -865,6 +870,18 @@ extension EnvironmentValues {
     var _listSectionFooterStyle: ListStyleKind? {
         get { builtinValue(key: "_listSectionFooterStyle", defaultValue: { nil }) as! ListStyleKind? }
         set { setBuiltinValue(key: "_listSectionFooterStyle", value: newValue, defaultValue: { nil }) }
+    }
+
+    /// The visibility the content asks of the enclosing navigation bar, which only the bar reads.
+    var _navigationBarVisibility: BarVisibility? {
+        get { builtinValue(key: "_navigationBarVisibility", defaultValue: { nil }) as! BarVisibility? }
+        set { setBuiltinValue(key: "_navigationBarVisibility", value: newValue, defaultValue: { nil }) }
+    }
+
+    /// The visibility the content asks of the enclosing tab bar, which only the bar reads.
+    var _tabBarVisibility: BarVisibility? {
+        get { builtinValue(key: "_tabBarVisibility", defaultValue: { nil }) as! BarVisibility? }
+        set { setBuiltinValue(key: "_tabBarVisibility", value: newValue, defaultValue: { nil }) }
     }
 
     var _onScrollGeometryChange: ((ScrollGeometry) -> Void)? {
