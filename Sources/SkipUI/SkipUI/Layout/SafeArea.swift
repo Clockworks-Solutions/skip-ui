@@ -92,7 +92,7 @@ struct SafeArea: Equatable, CustomStringConvertible {
         }
         return SafeArea(presentation: presentationBoundsPx, safe: Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight), absoluteSystemBars: systemBarEdges, bars: bars)
     }
-
+    
     var description: String {
         "SafeArea(presentationBoundsPx: \(presentationBoundsPx), safeBoundsPx: \(safeBoundsPx), absoluteSystemBarEdges: \(absoluteSystemBarEdges), barEdges: \(barEdges))"
     }
