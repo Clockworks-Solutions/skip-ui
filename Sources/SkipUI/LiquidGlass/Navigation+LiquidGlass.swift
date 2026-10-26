@@ -148,18 +148,6 @@ import skip.ui.liquidglass.__
     LiquidGlassTopBarEdge(backdrop: backdrop, height: height, isLarge: isLarge, scrollBehavior: scrollBehavior, wash: background, modifier: Modifier.zIndex(Float(1.0)).fillMaxWidth())
 }
 
-/// The content's safe area under a glass top bar. Its top follows the content's padding, also while a large title
-/// collapses, so a scrollable running beneath the bar measures against where the content actually starts.
-@Composable func liquidGlassNavContentSafeArea(_ safeArea: SafeArea?, isGlass: Bool, topPadding: Dp) -> SafeArea? {
-    guard isGlass, let safeArea else {
-        return safeArea
-    }
-    let safe = safeArea.safeBoundsPx
-    // Rounded as the padding is laid out, so the content's top matches exactly
-    let top = safeArea.presentationBoundsPx.top + with(LocalDensity.current) { Float(topPadding.roundToPx()) }
-    return SafeArea(presentation: safeArea.presentationBoundsPx, safe: Rect(left: safe.left, top: top, right: safe.right, bottom: safe.bottom), absoluteSystemBars: safeArea.absoluteSystemBarEdges)
-}
-
 /// Renders navigation content: a scrollable at its top runs beneath a glass top bar, and scrollables clear a floating
 /// bottom toolbar.
 @Composable func LiquidGlassNavContent(isGlassTopBar: Bool, bottomBarHeightPx: Float, content: @Composable () -> Void) {
@@ -172,11 +160,6 @@ import skip.ui.liquidglass.__
 /// vertical scrollable.
 @Composable func liquidGlassScrollUnderEdges(axes: Axis.Set = .vertical) -> Edge.Set {
     return axes.contains(.vertical) && LocalGlassTopBarUnderlay.current ? .top : []
-}
-
-/// The header a scrollable adds to clear the chrome it runs beneath by `expansion`.
-@Composable func liquidGlassScrollHeaderHeight(_ expansion: IntRect) -> Dp {
-    return with(LocalDensity.current) { expansion.top.toDp() }
 }
 
 // MARK: - Grouping
