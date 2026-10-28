@@ -313,6 +313,8 @@ extension EnvironmentValues {
             return EnvironmentSupport(builtinValue: horizontalSizeClass?.rawValue)
         case "isEnabled":
             return EnvironmentSupport(builtinValue: isEnabled)
+        case "isFocused":
+            return EnvironmentSupport(builtinValue: isFocused)
         case "isPresented":
             return EnvironmentSupport(builtinValue: isPresented)
         case "isSearching":
@@ -376,6 +378,8 @@ extension EnvironmentValues {
         case "isEnabled":
             setisEnabled(value as? Bool != false)
             return true
+        case "isFocused":
+            return false
         case "isPresented":
             return false
         case "isSearching":
@@ -465,6 +469,12 @@ extension EnvironmentValues {
         set { setBuiltinValue(key: "isEnabled", value: newValue, defaultValue: { true }) }
     }
 
+    /// Whether the nearest focusable ancestor itself has focus.
+    ///
+    /// - Seealso: ``View/focusable(_:)``
+    public var isFocused: Bool {
+        return _isFocused?.value == true
+    }
 
     /// Whether the view is in a presented sheet, full screen cover, or pushed navigation destination.
     ///
@@ -642,7 +652,6 @@ extension EnvironmentValues {
 
     var editMode: Binding<EditMode>?
     var isActivityFullscreen: Bool
-    var isFocused: Bool
     var isHoverEffectEnabled: Bool
     var isLuminanceReduced: Bool
     var isSceneCaptured: Bool
@@ -745,6 +754,12 @@ extension EnvironmentValues {
     var _isHitTestingEnabled: Bool {
         get { builtinValue(key: "_isHitTestingEnabled", defaultValue: { true }) as! Bool }
         set { setBuiltinValue(key: "_isHitTestingEnabled", value: newValue, defaultValue: { true }) }
+    }
+
+    /// Focus state of the nearest focusable ancestor, read through ``isFocused``.
+    var _isFocused: androidx.compose.runtime.State<Bool>? {
+        get { builtinValue(key: "_isFocused", defaultValue: { nil }) as! androidx.compose.runtime.State<Bool>? }
+        set { setBuiltinValue(key: "_isFocused", value: newValue, defaultValue: { nil }) }
     }
 
     /// Presentation state of the enclosing presentation, read through ``isPresented``.
