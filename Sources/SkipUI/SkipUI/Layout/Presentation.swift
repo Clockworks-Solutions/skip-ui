@@ -120,6 +120,8 @@ private let AlertDialogMaxWidth: Dp = 560.dp
         // Don't fully evaluate content until we set up the presented environment. For now we just want
         // to get at the modifiers to look for `BackDismissDisabled`
         let contentRenderables = ComposeBuilder.from(content).Evaluate(context: context, options: EvaluateOptions(isKeepNonModified: true).value)
+        // Content reads `isPresented` through this state, so it flips to false while the sheet animates out
+        let isPresentedState = rememberUpdatedState(isPresentedValue)
         let topInset = remember { mutableStateOf(0.dp) }
         let density = LocalDensity.current
         let handleHeight = isFullScreen ? 0.dp : 8.dp
@@ -228,6 +230,7 @@ private let AlertDialogMaxWidth: Dp = 560.dp
                             $0.set_sheetDepth(sheetDepth + 1)
                         }
                         $0.setdismiss(DismissAction(action: { isPresented.set(false) }))
+                        $0.set_isPresented(isPresentedState)
                         return ComposeResult.ok
                     } in: {
                         PreferenceValues.shared.collectPreferences([interactiveDismissDisabledCollector, detentPreferencesCollector, dragIndicatorPreferencesCollector]) {

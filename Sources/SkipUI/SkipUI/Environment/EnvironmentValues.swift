@@ -322,6 +322,10 @@ extension EnvironmentValues {
             return EnvironmentSupport(builtinValue: horizontalSizeClass?.rawValue)
         case "isEnabled":
             return EnvironmentSupport(builtinValue: isEnabled)
+        case "isFocused":
+            return EnvironmentSupport(builtinValue: isFocused)
+        case "isPresented":
+            return EnvironmentSupport(builtinValue: isPresented)
         case "isSearching":
             return EnvironmentSupport(builtinValue: isSearching)
         case "layoutDirection":
@@ -395,6 +399,10 @@ extension EnvironmentValues {
         case "isEnabled":
             setisEnabled(value as? Bool != false)
             return true
+        case "isFocused":
+            return false
+        case "isPresented":
+            return false
         case "isSearching":
             return false
         case "horizontalSizeClass":
@@ -503,6 +511,20 @@ extension EnvironmentValues {
     public var isEnabled: Bool {
         get { builtinValue(key: "isEnabled", defaultValue: { true }) as! Bool }
         set { setBuiltinValue(key: "isEnabled", value: newValue, defaultValue: { true }) }
+    }
+
+    /// Whether the nearest focusable ancestor itself has focus.
+    ///
+    /// - Seealso: ``View/focusable(_:)``
+    public var isFocused: Bool {
+        return _isFocused?.value == true
+    }
+
+    /// Whether the view is in a presented sheet, full screen cover, or pushed navigation destination.
+    ///
+    /// This becomes `false` as soon as the presentation is dismissed, while the view is still animating out.
+    public var isPresented: Bool {
+        return _isPresented?.value == true
     }
 
     public var isSearching: Bool {
@@ -673,10 +695,8 @@ extension EnvironmentValues {
     var verticalScrollBounceBehavior: ScrollBounceBehavior
 
     var isActivityFullscreen: Bool
-    var isFocused: Bool
     var isHoverEffectEnabled: Bool
     var isLuminanceReduced: Bool
-    var isPresented: Bool
     var isSceneCaptured: Bool
     var supportsMultipleWindows: Bool
 
@@ -779,6 +799,18 @@ extension EnvironmentValues {
     var _isHitTestingEnabled: Bool {
         get { builtinValue(key: "_isHitTestingEnabled", defaultValue: { true }) as! Bool }
         set { setBuiltinValue(key: "_isHitTestingEnabled", value: newValue, defaultValue: { true }) }
+    }
+
+    /// Focus state of the nearest focusable ancestor, read through ``isFocused``.
+    var _isFocused: androidx.compose.runtime.State<Bool>? {
+        get { builtinValue(key: "_isFocused", defaultValue: { nil }) as! androidx.compose.runtime.State<Bool>? }
+        set { setBuiltinValue(key: "_isFocused", value: newValue, defaultValue: { nil }) }
+    }
+
+    /// Presentation state of the enclosing presentation, read through ``isPresented``.
+    var _isPresented: androidx.compose.runtime.State<Bool>? {
+        get { builtinValue(key: "_isPresented", defaultValue: { nil }) as! androidx.compose.runtime.State<Bool>? }
+        set { setBuiltinValue(key: "_isPresented", value: newValue, defaultValue: { nil }) }
     }
 
     var _isSearching: MutableState<Bool>? {

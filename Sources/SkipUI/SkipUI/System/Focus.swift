@@ -2,11 +2,18 @@
 // SPDX-License-Identifier: MPL-2.0
 #if !SKIP_BRIDGE
 #if SKIP
+import androidx.compose.foundation.focusable
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalInputModeManager
 #endif
 
 extension View {
@@ -60,7 +67,78 @@ extension View {
     public func focused(_ condition: Binding<Bool>) -> any View {
         return focused(condition, equals: true)
     }
+
+    // SKIP @bridge
+    public func focusable(_ isFocusable: Bool = true) -> any View {
+        #if SKIP
+        return ModifiedContent(content: self, modifier: FocusableModifier(isFocusable: isFocusable))
+        #else
+        return self
+        #endif
+    }
 }
+
+#if SKIP
+/// Makes content focusable and publishes its focus state to ``EnvironmentValues/isFocused``.
+///
+/// The state is created during evaluation so that view bodies reading `isFocused` see it, and is
+/// attached to the rendered content's focus node during rendering.
+///
+/// Matches iOS, where `.focusable()` views only take focus during keyboard navigation and `isFocused`
+/// reflects the view itself rather than a focused descendant such as a text field.
+final class FocusableModifier: ModifierProtocol {
+    let isFocusable: Bool
+
+    init(isFocusable: Bool) {
+        self.isFocusable = isFocusable
+    }
+
+    override var role: ModifierRole {
+        return .unspecified
+    }
+
+    @Composable override func Evaluate(content: View, context: ComposeContext, options: Int) -> kotlin.collections.List<Renderable>? {
+        let isFocused = remember { mutableStateOf(false) }
+        // A non-focusable view defers to the nearest focusable ancestor. Always provide a value so that
+        // toggling `isFocusable` does not change the composition structure and reset descendant state
+        let environmentFocus = isFocusable ? isFocused : EnvironmentValues.shared._isFocused
+        let renderables = EnvironmentValues.shared.setValuesWithReturn {
+            $0.set_isFocused(environmentFocus)
+            return ComposeResult.ok
+        } in: {
+            return ModifiedContent.Evaluate(content: content, context: context, options: options)
+        }
+        return renderables.map { ModifiedContent(content: $0, modifier: FocusableStateModifier(isFocusable: isFocusable, isFocused: isFocused, environmentFocus: environmentFocus)) }
+    }
+
+    @Composable override func Render(content: Renderable, context: ComposeContext) {
+        content.Render(context: context)
+    }
+}
+
+final class FocusableStateModifier: RenderModifier {
+    init(isFocusable: Bool, isFocused: MutableState<Bool>, environmentFocus: androidx.compose.runtime.State<Bool>?) {
+        super.init()
+        self.action = { renderable, context in
+            let canTakeFocus = isFocusable && LocalInputModeManager.current.inputMode == InputMode.Keyboard
+            var context = context
+            // Observe before `focusable` so this callback sees the focus target it adds. Keep that target and toggle
+            // `canFocus` instead of disabling it, or the callback would observe a descendant's target instead
+            context.modifier = context.modifier
+                .onFocusChanged { isFocused.value = $0.isFocused }
+                .focusProperties { canFocus = canTakeFocus }
+                .focusable()
+            // Descendants evaluated during rendering must see the same focus state
+            EnvironmentValues.shared.setValues {
+                $0.set_isFocused(environmentFocus)
+                return ComposeResult.ok
+            } in: {
+                renderable.Render(context: context)
+            }
+        }
+    }
+}
+#endif
 
 /*
 import protocol Combine.ObservableObject

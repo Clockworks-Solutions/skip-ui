@@ -201,8 +201,11 @@ public struct NavigationStack : View, Renderable {
                             let toolbarPreferencesCollector = PreferenceCollector<ToolbarPreferences>(key: ToolbarPreferenceKey.self, state: toolbarPreferences)
                             let toolbarContentPreferences = rememberSaveable(stateSaver: state.stateSaver as! Saver<Preference<ToolbarContentPreferences>, Any>) { mutableStateOf(Preference<ToolbarContentPreferences>(key: ToolbarContentPreferenceKey.self)) }
                             let toolbarContentPreferencesCollector = PreferenceCollector<ToolbarContentPreferences>(key: ToolbarContentPreferenceKey.self, state: toolbarContentPreferences)
+                            // Derived so that only views reading `isPresented` recompose when this entry is popped
+                            let isPresented = remember(state.id) { derivedStateOf { navigator.value.isViewPresented(id: state.id) } }
                             EnvironmentValues.shared.setValues {
                                 $0.setdismiss(DismissAction(action: { navigator.value.navigateBack() }))
+                                $0.set_isPresented(isPresented)
                                 return ComposeResult.ok
                             } in: {
                                 let arguments = NavigationEntryArguments(isRoot: false, state: state, safeArea: safeArea, ignoresSafeAreaEdges: ignoresSafeAreaEdges, title: title.value.reduced, toolbarPreferences: toolbarPreferences.value.reduced)
